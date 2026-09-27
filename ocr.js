@@ -1,6 +1,6 @@
 // זיהוי מסמכים עם Google Gemini (מכסה חינמית)
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
-const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"];
+const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"];
 
 const PROMPT = `You read Israeli business paperwork (Hebrew or English) for an accountant.
 Look at the page images (all pages belong to ONE document) and return ONLY a JSON object:
@@ -59,6 +59,8 @@ export function normalizeResult(r) {
   return out;
 }
 
+function safeMsg(body) { try { return (JSON.parse(body).error?.message || "").slice(0, 160); } catch { return String(body).slice(0, 160); } }
+
 async function callModel(model, key, pages) {
   const parts = [{ text: PROMPT }];
   for (const p of pages.slice(0, 4)) parts.push({ inline_data: { mime_type: "image/jpeg", data: p.slice(p.indexOf(",") + 1) } });
@@ -88,13 +90,15 @@ export async function recognize(pages, settings) {
       return { ok: true, result: normalizeResult(await callModel(m, key, pages)), model: m };
     } catch (e) {
       last = e;
-      if (e.status === 404 || e.status === 400 && /model/i.test(e.body || "")) continue; // דגם לא קיים → הבא
+      // דגם לא קיים / לא נתמך / עמוס → מנסים את הבא
+      if ([404, 500, 503].includes(e.status) || (e.status === 400 && /model|not found|not supported/i.test(e.body || ""))) continue;
       break;
     }
   }
-  let message = "הזיהוי לא הצליח, אז ממלאים ידנית.";
+  const detail = last ? ` (קוד: ${last.status || last.name || "?"}${last.body ? " · " + (safeMsg(last.body)) : ""})` : "";
+  let message = "הזיהוי לא הצליח, אז ממלאים ידנית." + detail;
   if (last?.status === 429) message = "הגעת למכסת הזיהוי החינמית לרגע זה. אפשר למלא ידנית או לנסות שוב בעוד דקה.";
-  else if (last?.status === 400 || last?.status === 403) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית.";
+  else if (last?.status === 400 || last?.status === 403) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית." + detail;
   else if (last instanceof SyntaxError) message = "התשובה מהזיהוי לא הייתה ברורה, אז ממלאים ידנית.";
   return { ok: false, message };
 }
