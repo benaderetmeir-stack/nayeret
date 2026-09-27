@@ -572,13 +572,7 @@ function initReports() {
     $("rShare").onclick = () => shareFiles(state.lastFiles, state.lastTitle);
     $("rDownloadAll").onclick = async () => { for (const f of state.lastFiles) { downloadBlob(f.blob, f.name); await new Promise((r) => setTimeout(r, 400)); } };
     $("rFiles").addEventListener("click", (e) => { const b = e.target.closest("[data-dl]"); if (b) { const f = state.lastFiles[Number(b.dataset.dl)]; downloadBlob(f.blob, f.name); } });
-    $("rHistory").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-rerun]"); if (!b) return;
-      const h = reportHistory[Number(b.dataset.rerun)];
-      setReportForm(h); runReport(h);
-    });
   }
-  loadHistory();
 }
 const KINDS = ["invoice", "other"];
 function readReportForm() {
@@ -590,14 +584,6 @@ function readReportForm() {
   };
 }
 const kindsOf = (h) => h.kinds || (h.kind ? [h.kind] : KINDS);
-function setReportForm(h) {
-  const ks = kindsOf(h);
-  $("rKindInv").checked = ks.includes("invoice"); $("rKindOther").checked = ks.includes("other");
-  document.querySelector(`input[name="rBy"][value="${h.by}"]`).checked = true;
-  $("rMonthBox").hidden = h.by !== "month"; $("rRangeBox").hidden = h.by === "month";
-  if (h.month) $("rMonth").value = h.month; if (h.from) $("rFrom").value = h.from; if (h.to) $("rTo").value = h.to;
-  $("oTable").checked = h.outputs.includes("table"); $("oDocs").checked = h.outputs.includes("docs"); $("oExcel").checked = h.outputs.includes("excel");
-}
 const sortRows = (rows) => rows.sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.createdAt || 0) - (b.createdAt || 0));
 
 async function runReport(p) {
@@ -617,8 +603,8 @@ async function runReport(p) {
   const withRows = sections.filter((s) => s.rows.length);
   if (!withRows.length) { $("rResult").hidden = true; return toast("אין מסמכים בטווח הזה"); }
   const empty = sections.filter((s) => !s.rows.length).map((s) => KIND_LABEL[s.kind]);
-  const ok = await generate(withRows, { period, fileTag: tag, outputs: { table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
-  if (ok) { const { kind, ...rest } = p; await state.store.addReport({ ...rest, count: withRows.reduce((n, s) => n + s.rows.length, 0) }); loadHistory(); }
+  await generate(withRows, { period, fileTag: tag, outputs: { table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
+
 }
 
 // sections: [{kind, rows}]
@@ -658,15 +644,6 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
   $("rFiles").innerHTML = files.map((f, i) => `<li><div><div class="fname">${esc(f.name)}</div><div class="fsize">${f.label} · ${fmtSize(f.blob.size)}</div></div><button class="btn btn-ghost btn-sm" data-dl="${i}">הורדה</button></li>`).join("");
   $("rResult").scrollIntoView({ behavior: "smooth", block: "start" });
   return true;
-}
-
-let reportHistory = [];
-async function loadHistory() {
-  try { reportHistory = await state.store.listReports(); } catch (e) { console.warn(e); reportHistory = []; }
-  const fmtTime = (t) => { const d = new Date(t); return `${fmtDate(localIso(d))} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-  $("rHistory").innerHTML = reportHistory.length ? reportHistory.map((h, i) => `<li><div><div><b>${kindsOf(h).map((k) => KIND_LABEL[k]).join(" + ")}</b> · ${h.by === "month" ? `תיקיית ${esc(shortMonth(h.month))}` : `${fmtDate(h.from)} עד ${fmtDate(h.to)}`}</div>
-    <div class="hmeta">${h.count} מסמכים · הופק ${fmtTime(h.createdAt)}</div></div>
-    <button class="btn btn-ghost btn-sm" data-rerun="${i}">הפק שוב</button></li>`).join("") : `<li class="hint">עדיין לא הופקו דוחות.</li>`;
 }
 
 /* ======================= שליחה ======================= */
