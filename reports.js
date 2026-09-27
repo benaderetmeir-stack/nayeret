@@ -200,11 +200,18 @@ export async function buildDocsPdf(rows, kind, getPages, onProgress, opts = {}) 
 }
 
 /* ---------- אקסל ---------- */
-export async function buildExcel(rows, kind, meta) {
+// sections: [{kind, rows}] → קובץ אקסל אחד, גיליון לכל סוג
+export async function buildExcel(sections, meta) {
   const ExcelJS = window.ExcelJS;
-  const cols = COLS[kind].filter((c) => c.key !== "thumb");
   const wb = new ExcelJS.Workbook();
   wb.creator = meta.bizName;
+  for (const sec of sections) addSheet(wb, sec.rows, sec.kind, { ...meta, title: KIND_LABEL[sec.kind] });
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function addSheet(wb, rows, kind, meta) {
+  const cols = COLS[kind].filter((c) => c.key !== "thumb");
   const ws = wb.addWorksheet(KIND_LABEL[kind], { views: [{ rightToLeft: true, state: "frozen", ySplit: 3 }] });
   const n = cols.length;
   ws.mergeCells(1, 1, 1, n);
@@ -257,9 +264,6 @@ export async function buildExcel(rows, kind, meta) {
   });
   if (rows.length) ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + rows.length, column: n } };
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
-
-  const buf = await wb.xlsx.writeBuffer();
-  return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
 /* ---------- הורדה ושיתוף ---------- */

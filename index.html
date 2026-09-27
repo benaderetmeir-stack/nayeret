@@ -117,11 +117,11 @@
     <section id="reportsView" class="view" hidden>
       <div class="panel">
         <h2 class="panel-title">הפקת דוח לרואה החשבון</h2>
-        <p class="panel-lead">בוחרים טווח תאריכים וסוג, והמערכת מפיקה טבלה מסודרת וקובץ של כל המסמכים באותו סדר ובאותו מספור.</p>
+        <p class="panel-lead">מסמנים מה להפיק ולאיזה חודש או טווח תאריכים. לכל סוג מופקת טבלה מסודרת וקובץ של כל המסמכים באותו סדר ובאותו מספור.</p>
         <div class="report-form">
-          <div class="seg" role="radiogroup" aria-label="סוג">
-            <label><input type="radio" name="rKind" value="invoice" checked><span>חשבוניות וקבלות</span></label>
-            <label><input type="radio" name="rKind" value="other"><span>ניירת אחרת</span></label>
+          <div class="report-outputs" role="group" aria-label="מה להפיק">
+            <label class="check"><input type="checkbox" id="rKindInv" checked><span>חשבוניות וקבלות</span></label>
+            <label class="check"><input type="checkbox" id="rKindOther" checked><span>ניירת אחרת</span></label>
           </div>
           <div class="seg" role="radiogroup" aria-label="לפי">
             <label><input type="radio" name="rBy" value="month" checked><span>לפי חודש (תיקייה)</span></label>
