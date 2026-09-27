@@ -385,12 +385,33 @@ function setKind(kind) {
   $("rvOtherFields").hidden = kind !== "other";
   checkDup();
 }
-document.querySelectorAll('input[name="rvKind"]').forEach((r) => r.addEventListener("change", () => { setKind(r.value); syncDate(); }));
+document.querySelectorAll('input[name="rvKind"]').forEach((r) => r.addEventListener("change", () => { carryOver(r.value); setKind(r.value); syncDate(); }));
+
+// מעבר בין חשבונית לניירת אחרת: הפרטים עוברים איתו, לא ממלאים מחדש
+function carryOver(toKind) {
+  const src = up.src || {};
+  const setIfEmpty = (el, v) => { if (el.value === "" && v != null && v !== "") el.value = v; };
+  if (toKind === "invoice") {
+    setIfEmpty($("rvSupplier"), $("rvName").value || src.supplier || src.name);
+    setIfEmpty($("rvInvNo"), src.invoiceNumber);
+    setIfEmpty($("rvTotal"), $("rvAmount").value || src.total || src.amount);
+    setIfEmpty($("rvVat"), src.vat);
+    setIfEmpty($("rvNet"), src.net);
+    $("rvDateI").value = $("rvDateO").value || $("rvDateI").value;
+    if (src.exempt) $("rvExempt").checked = true;
+    applyExempt();
+  } else {
+    setIfEmpty($("rvName"), $("rvSupplier").value || src.name || src.supplier);
+    setIfEmpty($("rvAmount"), $("rvTotal").value || src.amount || src.total);
+    setIfEmpty($("rvDocType"), src.kind === "other" ? src.docType : "");
+    $("rvDateO").value = $("rvDateI").value || $("rvDateO").value;
+  }
+}
 const curKind = () => document.querySelector('input[name="rvKind"]:checked').value;
 const dateEl = () => curKind() === "invoice" ? $("rvDateI") : $("rvDateO");
 
 function fillReview(d, rec) {
-  up.pageIdx = 0; up.manualMonth = !!up.edit;
+  up.pageIdx = 0; up.manualMonth = !!up.edit; up.src = { ...d };
   renderReviewImg();
   const r = $("rvRecog");
   if (rec) { r.hidden = false; r.textContent = rec.ok ? "זיהיתי את הפרטים הבאים. בדקי, תקני במידת הצורך ואשרי." : rec.message; }
