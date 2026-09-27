@@ -19,8 +19,9 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "note": string              // very short Hebrew note if something important is unclear, else ""
 }
 Rules:
-- "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי).
-- "other" = payslips, bank statements, salary transfers, delivery notes, payment confirmations and anything else.
+- "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי), including a plain receipt (קבלה) from a VAT-exempt dealer (עוסק פטור), which is the only document such a dealer issues.
+- Any document issued by a business that shows an amount paid for goods or services counts as "invoice". When unsure between the two, choose "invoice".
+- "other" = payslips, bank statements, salary transfers, delivery notes without payment, payment confirmations and anything else.
 - Numbers as plain numbers without currency signs or thousands separators. Credit notes (זיכוי) as negative totals.
 - Dates in Israel are written day/month/year.
 - Never invent values; use "" or null when unsure.`;
