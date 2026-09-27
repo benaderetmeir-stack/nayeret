@@ -1,0 +1,45 @@
+rules_version = '2';
+// כללי אבטחה ל-Firestore — מערכת ניירת
+// רק משתמש שרשום כ"חבר" בעסק (businesses/{biz}/members/{uid}) יכול לקרוא ולכתוב.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember(biz) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/businesses/$(biz)/members/$(request.auth.uid));
+    }
+
+    // רשימת החברים: כל משתמש רואה רק את עצמו; הוספה רק מהקונסול
+    match /businesses/{biz}/members/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /businesses/{biz}/settings/{id} {
+      allow read, write: if isMember(biz);
+    }
+
+    match /businesses/{biz}/reports/{id} {
+      allow read, create: if isMember(biz);
+      allow update, delete: if false;
+    }
+
+    match /businesses/{biz}/docs/{docId} {
+      allow read, delete: if isMember(biz);
+      allow create, update: if isMember(biz)
+        && request.resource.data.kind in ['invoice', 'other']
+        && request.resource.data.month is string
+        && request.resource.data.month.matches('^[0-9]{4}-[0-9]{2}$')
+        && request.resource.data.date is string;
+
+      match /pages/{pageId} {
+        allow read, delete: if isMember(biz);
+        allow create: if isMember(biz)
+          && request.resource.data.data is string
+          && request.resource.data.data.matches('^data:image/jpeg;base64,.*')
+          && request.resource.data.i is int;
+        allow update: if false;
+      }
+    }
+  }
+}

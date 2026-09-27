@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0FA3B1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ניירת INBAR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Rubik:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230FA3B1'/%3E%3Cpath d='M20 14h18l8 8v28H20z' fill='%23fff'/%3E%3Cpath d='M26 32h14M26 38h14M26 44h9' stroke='%230E6A8C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ===== כניסה ===== -->
+<section id="loginView" class="login" hidden>
+  <div class="login-card">
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="currentColor"/><path d="M20 14h18l8 8v28H20z" fill="#fff"/><path d="M26 32h14M26 38h14M26 44h9" stroke="#0E6A8C" stroke-width="3" stroke-linecap="round"/></svg>
+    </div>
+    <h1 class="login-title">ניירת לרואה חשבון</h1>
+    <p class="login-sub" id="loginBizName">INBAR Professional Cosmetic Center</p>
+    <form id="loginForm" class="login-form" autocomplete="on">
+      <label class="field">
+        <span>סיסמה</span>
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit" id="loginBtn">כניסה</button>
+      <p class="form-error" id="loginError" hidden></p>
+    </form>
+  </div>
+</section>
+
+<!-- ===== אפליקציה ===== -->
+<div id="appView" class="app" hidden>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="topbar-brand">
+        <span class="topbar-logo" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M20 14h18l8 8v28H20z" fill="currentColor"/><path d="M26 32h14M26 38h14M26 44h9" stroke="#0FA3B1" stroke-width="3" stroke-linecap="round"/></svg></span>
+        <div>
+          <div class="topbar-title">ניירת לרואה חשבון</div>
+          <div class="topbar-sub" id="bizName">INBAR</div>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs" role="tablist">
+        <button class="tab is-active" data-view="invoice" role="tab">חשבוניות</button>
+        <button class="tab" data-view="other" role="tab">ניירת אחרת</button>
+        <button class="tab" data-view="reports" role="tab">דוחות</button>
+        <button class="tab" data-view="settings" role="tab">הגדרות</button>
+      </nav>
+    </div>
+    <div class="demo-banner" id="demoBanner" hidden>מצב תצוגה: הנתונים כאן לדוגמה בלבד ולא נשמרים</div>
+  </header>
+
+  <main class="main">
+    <!-- ===== טבלאות (חשבוניות / ניירת אחרת) ===== -->
+    <section id="tableView" class="view">
+      <div class="month-bar">
+        <div class="month-nav">
+          <button class="icon-btn" id="monthNext" aria-label="חודש הבא">‹</button>
+          <button class="month-label" id="monthLabel" aria-label="בחירת חודש">
+            <svg class="folder-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            <span id="monthText">ספטמבר 2026</span>
+          </button>
+          <input type="month" id="monthPicker" class="visually-hidden" tabindex="-1">
+          <button class="icon-btn" id="monthPrev" aria-label="חודש קודם">›</button>
+        </div>
+        <div class="month-actions">
+          <span class="pill pill-closed" id="monthClosedPill" hidden>חודש סגור · נשלח לרו"ח</span>
+          <button class="btn btn-ghost btn-sm" id="closeMonthBtn">סגור חודש</button>
+        </div>
+      </div>
+
+      <div class="search-bar">
+        <div class="search-main">
+          <input id="searchText" type="search" placeholder="חיפוש: ספק, שם או מס' חשבונית">
+          <button class="btn btn-ghost btn-sm" id="searchToggle" aria-expanded="false">סינון מתקדם</button>
+        </div>
+        <div class="search-adv" id="searchAdv" hidden>
+          <label class="field field-sm"><span>מתאריך</span><input type="date" id="fDateFrom"></label>
+          <label class="field field-sm"><span>עד תאריך</span><input type="date" id="fDateTo"></label>
+          <label class="field field-sm"><span>מסכום ₪</span><input type="number" inputmode="decimal" id="fAmtFrom" step="0.01"></label>
+          <label class="field field-sm"><span>עד סכום ₪</span><input type="number" inputmode="decimal" id="fAmtTo" step="0.01"></label>
+          <div class="search-adv-actions">
+            <button class="btn btn-primary btn-sm" id="searchRun">חפש בכל החודשים</button>
+            <button class="btn btn-ghost btn-sm" id="searchClear">נקה</button>
+          </div>
+        </div>
+        <div class="search-state" id="searchState" hidden></div>
+      </div>
+
+      <div class="selection-bar" id="selectionBar" hidden>
+        <span id="selectionCount">0 נבחרו</span>
+        <div class="selection-actions">
+          <button class="btn btn-primary btn-sm" id="selMakeFile">הפק קובץ מהנבחרים</button>
+          <button class="btn btn-ghost btn-sm" id="selClear">בטל בחירה</button>
+        </div>
+      </div>
+
+      <div class="table-wrap" id="tableWrap">
+        <table class="doc-table" id="docTable">
+          <thead id="docThead"></thead>
+          <tbody id="docTbody"></tbody>
+          <tfoot id="docTfoot"></tfoot>
+        </table>
+        <div class="empty" id="emptyState" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <p id="emptyText">אין מסמכים בחודש הזה</p>
+        </div>
+      </div>
+      <div class="cards" id="docCards"></div>
+    </section>
+
+    <!-- ===== דוחות ===== -->
+    <section id="reportsView" class="view" hidden>
+      <div class="panel">
+        <h2 class="panel-title">הפקת דוח לרואה החשבון</h2>
+        <p class="panel-lead">בוחרים טווח תאריכים וסוג, והמערכת מפיקה טבלה מסודרת וקובץ של כל המסמכים באותו סדר ובאותו מספור.</p>
+        <div class="report-form">
+          <div class="seg" role="radiogroup" aria-label="סוג">
+            <label><input type="radio" name="rKind" value="invoice" checked><span>חשבוניות וקבלות</span></label>
+            <label><input type="radio" name="rKind" value="other"><span>ניירת אחרת</span></label>
+          </div>
+          <div class="seg" role="radiogroup" aria-label="לפי">
+            <label><input type="radio" name="rBy" value="month" checked><span>לפי חודש (תיקייה)</span></label>
+            <label><input type="radio" name="rBy" value="range"><span>לפי טווח תאריכים</span></label>
+          </div>
+          <div class="report-dates" id="rMonthBox">
+            <label class="field"><span>חודש</span><input type="month" id="rMonth"></label>
+          </div>
+          <div class="report-dates" id="rRangeBox" hidden>
+            <label class="field"><span>מתאריך</span><input type="date" id="rFrom"></label>
+            <label class="field"><span>עד תאריך</span><input type="date" id="rTo"></label>
+          </div>
+          <div class="report-outputs">
+            <label class="check"><input type="checkbox" id="oTable" checked><span>טבלה ב-PDF</span></label>
+            <label class="check"><input type="checkbox" id="oDocs" checked><span>קובץ המסמכים ב-PDF</span></label>
+            <label class="check"><input type="checkbox" id="oExcel" checked><span>טבלה באקסל</span></label>
+          </div>
+          <button class="btn btn-primary" id="rRun">הפק קבצים</button>
+        </div>
+      </div>
+
+      <div class="panel" id="rResult" hidden>
+        <h2 class="panel-title">הקבצים מוכנים</h2>
+        <p class="panel-lead" id="rResultInfo"></p>
+        <ul class="file-list" id="rFiles"></ul>
+        <div class="row-actions">
+          <button class="btn btn-primary" id="rShare">שליחה במייל / שיתוף</button>
+          <button class="btn btn-ghost" id="rDownloadAll">הורד הכול</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel-title">היסטוריית דוחות</h2>
+        <p class="panel-lead">כל דוח שהופק נרשם כאן, ואפשר להפיק אותו שוב באותם פרטים.</p>
+        <ul class="history" id="rHistory"></ul>
+      </div>
+    </section>
+
+    <!-- ===== הגדרות ===== -->
+    <section id="settingsView" class="view" hidden>
+      <div class="panel">
+        <h2 class="panel-title">פרטי העסק</h2>
+        <label class="field"><span>שם העסק</span><input id="sBizName"></label>
+        <label class="field"><span>שיעור מע"מ (%)</span><input id="sVat" type="number" step="0.1" inputmode="decimal"></label>
+      </div>
+      <div class="panel">
+        <h2 class="panel-title">זיהוי מסמכים (Google Gemini)</h2>
+        <p class="panel-lead">מפתח API חינמי מ-Google AI Studio. בלי מפתח, ממלאים את הפרטים ידנית.</p>
+        <label class="field"><span>מפתח API</span><input id="sGeminiKey" type="password" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>דגם</span><input id="sGeminiModel" spellcheck="false" placeholder="gemini-flash-latest"></label>
+      </div>
+      <div class="panel">
+        <h2 class="panel-title">חודשים סגורים</h2>
+        <p class="panel-lead">מסמך שהתאריך שלו בחודש סגור נכנס אוטומטית לחודש הפתוח הנוכחי, עם סימון איחור.</p>
+        <ul class="chips" id="sClosed"></ul>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-primary" id="sSave">שמירת הגדרות</button>
+        <button class="btn btn-ghost" id="sLogout">יציאה</button>
+      </div>
+    </section>
+  </main>
+
+  <button class="fab" id="fab" aria-label="העלאת מסמך">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    <span>מסמך חדש</span>
+  </button>
+</div>
+
+<!-- ===== חלון העלאה ===== -->
+<dialog id="uploadDlg" class="dlg dlg-wide">
+  <div class="dlg-head">
+    <h2 id="upTitle">מסמך חדש</h2>
+    <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+  </div>
+
+  <!-- שלב 1: איסוף דפים -->
+  <div class="up-step" id="upCollect">
+    <div class="up-start" id="upStart">
+      <label class="big-choice">
+        <input type="file" accept="image/*" capture="environment" id="inCamera" class="visually-hidden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span>צילום</span>
+      </label>
+      <label class="big-choice">
+        <input type="file" accept="image/*,application/pdf" multiple id="inFile" class="visually-hidden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M12 10v7M9 13l3-3 3 3"/></svg>
+        <span>קובץ / PDF</span>
+      </label>
+    </div>
+    <div class="up-pages" id="upPagesBox" hidden>
+      <ol class="page-strip" id="upPages"></ol>
+      <div class="ask-more">
+        <p class="ask-q">יש עוד דף למסמך הזה?</p>
+        <div class="row-actions">
+          <label class="btn btn-ghost">
+            <input type="file" accept="image/*" capture="environment" id="inCameraMore" class="visually-hidden">
+            כן, צלם עוד דף
+          </label>
+          <label class="btn btn-ghost">
+            <input type="file" accept="image/*,application/pdf" multiple id="inFileMore" class="visually-hidden">
+            כן, הוסף קובץ
+          </label>
+          <button class="btn btn-primary" id="upDone">לא, סיימתי</button>
+        </div>
+      </div>
+    </div>
+    <div class="busy" id="upBusy" hidden><span class="spinner"></span><span id="upBusyText">מעבד…</span></div>
+  </div>
+
+  <!-- שלב 1ב: כמה קבצים -->
+  <div class="up-step" id="upMulti" hidden>
+    <p class="ask-q" id="upMultiQ">נבחרו כמה קבצים. מה הם?</p>
+    <div class="row-actions">
+      <button class="btn btn-primary" id="upMultiSame">דפים של אותו מסמך</button>
+      <button class="btn btn-ghost" id="upMultiSep">מסמכים נפרדים</button>
+    </div>
+  </div>
+
+  <!-- שלב 2: אישור פרטים -->
+  <form class="up-step up-review" id="upReview" hidden>
+    <div class="review-img">
+      <div class="review-img-frame" id="rvImgFrame"><img id="rvImg" alt="תצוגת המסמך"></div>
+      <div class="review-img-nav" id="rvImgNav"></div>
+    </div>
+    <div class="review-form">
+      <div class="notice notice-info" id="rvRecog" hidden></div>
+      <div class="notice notice-warn" id="rvDup" hidden></div>
+      <div class="seg" role="radiogroup" aria-label="סוג מסמך">
+        <label><input type="radio" name="rvKind" value="invoice" checked><span>חשבונית / קבלה</span></label>
+        <label><input type="radio" name="rvKind" value="other"><span>ניירת אחרת</span></label>
+      </div>
+
+      <div class="grid2" id="rvInvoiceFields">
+        <label class="field span2"><span>ספק</span><input id="rvSupplier" autocomplete="off"></label>
+        <label class="field"><span>מספר חשבונית</span><input id="rvInvNo" autocomplete="off" inputmode="numeric"></label>
+        <label class="field"><span>תאריך</span><input id="rvDateI" type="date"></label>
+        <label class="check span2"><input type="checkbox" id="rvExempt"><span>עוסק פטור (מע"מ 0)</span></label>
+        <label class="field"><span>סכום כולל ₪</span><input id="rvTotal" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field"><span>מע"מ ₪</span><input id="rvVat" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field"><span>לפני מע"מ ₪</span><input id="rvNet" type="number" step="0.01" inputmode="decimal"></label>
+        <div class="field calc-hint"><button type="button" class="btn btn-ghost btn-sm" id="rvCalcVat">חשב מע"מ מהסכום הכולל</button></div>
+      </div>
+
+      <div class="grid2" id="rvOtherFields" hidden>
+        <label class="field"><span>סוג מסמך</span>
+          <input id="rvDocType" list="docTypes" autocomplete="off">
+          <datalist id="docTypes">
+            <option value="העברת משכורת"><option value="תלוש שכר"><option value="דף בנק"><option value="תעודת משלוח"><option value="קבלה"><option value="אישור תשלום"><option value="אחר">
+          </datalist>
+        </label>
+        <label class="field"><span>תאריך</span><input id="rvDateO" type="date"></label>
+        <label class="field span2"><span>שם</span><input id="rvName" autocomplete="off"></label>
+        <label class="field"><span>סכום ₪</span><input id="rvAmount" type="number" step="0.01" inputmode="decimal"></label>
+      </div>
+
+      <label class="field"><span>הערה</span><input id="rvNote" autocomplete="off"></label>
+      <label class="field"><span>שיוך לחודש (תיקייה)</span><input id="rvMonth" type="month"></label>
+      <p class="hint" id="rvMonthHint" hidden></p>
+
+      <div class="row-actions sticky-actions">
+        <button class="btn btn-primary" type="submit" id="rvSave">אישור ושמירה</button>
+        <button class="btn btn-ghost" type="button" id="rvCancel">ביטול</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- ===== צפייה במסמך ===== -->
+<dialog id="viewDlg" class="dlg dlg-full">
+  <div class="dlg-head">
+    <h2 id="vwTitle">מסמך</h2>
+    <div class="vw-tools">
+      <button class="icon-btn" id="vwZoomOut" aria-label="הקטנה">−</button>
+      <button class="icon-btn" id="vwZoomIn" aria-label="הגדלה">+</button>
+      <button class="btn btn-ghost btn-sm" id="vwPrint">הדפסה</button>
+      <button class="btn btn-ghost btn-sm" id="vwDownload">הורדה</button>
+      <button class="btn btn-ghost btn-sm" id="vwShare">שיתוף</button>
+      <button class="btn btn-ghost btn-sm" id="vwEdit">עריכת פרטים</button>
+      <button class="btn btn-danger btn-sm" id="vwDelete">מחיקה</button>
+      <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+    </div>
+  </div>
+  <div class="vw-meta" id="vwMeta"></div>
+  <div class="vw-body" id="vwBody"></div>
+</dialog>
+
+<!-- ===== אישור ===== -->
+<dialog id="confirmDlg" class="dlg dlg-small">
+  <p id="cfText"></p>
+  <div class="row-actions">
+    <button class="btn btn-danger" id="cfYes">כן</button>
+    <button class="btn btn-ghost" id="cfNo">ביטול</button>
+  </div>
+</dialog>
+
+<!-- ===== שליחה ===== -->
+<dialog id="shareDlg" class="dlg dlg-small">
+  <div class="dlg-head">
+    <h2>שליחה במייל</h2>
+    <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+  </div>
+  <p class="hint">הקבצים יורדו למכשיר, וייפתח מייל חדש. צרפי אליו את הקבצים שירדו.</p>
+  <label class="field"><span>למי לשלוח</span><input id="shTo" type="email" list="recentEmails" autocomplete="email"></label>
+  <datalist id="recentEmails"></datalist>
+  <label class="field"><span>נושא</span><input id="shSubject"></label>
+  <div class="row-actions">
+    <button class="btn btn-primary" id="shGo">הורד ופתח מייל</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- ספריות -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="js/config.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

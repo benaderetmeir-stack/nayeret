@@ -1,0 +1,100 @@
+// זיהוי מסמכים עם Google Gemini (מכסה חינמית)
+const API = "https://generativelanguage.googleapis.com/v1beta/models/";
+const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"];
+
+const PROMPT = `You read Israeli business paperwork (Hebrew or English) for an accountant.
+Look at the page images (all pages belong to ONE document) and return ONLY a JSON object:
+{
+  "kind": "invoice" | "other",
+  "docType": string,          // Hebrew label, e.g. "חשבונית מס", "חשבונית מס קבלה", "קבלה", "תלוש שכר", "דף בנק", "העברת משכורת", "תעודת משלוח", "אישור תשלום"
+  "supplier": string,         // for invoices/receipts: issuing business name as printed
+  "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier)
+  "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
+  "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable
+  "total": number | null,     // total including VAT
+  "vat": number | null,       // VAT amount
+  "net": number | null,       // amount before VAT
+  "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
+  "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
+  "note": string              // very short Hebrew note if something important is unclear, else ""
+}
+Rules:
+- "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי).
+- "other" = payslips, bank statements, salary transfers, delivery notes, payment confirmations and anything else.
+- Numbers as plain numbers without currency signs or thousands separators. Credit notes (זיכוי) as negative totals.
+- Dates in Israel are written day/month/year.
+- Never invent values; use "" or null when unsure.`;
+
+function num(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^\d.\-]/g, ""));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+function isoDate(v) {
+  if (!v) return "";
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return "";
+}
+
+export function normalizeResult(r) {
+  r = r || {};
+  const out = {
+    kind: r.kind === "other" ? "other" : "invoice",
+    docType: String(r.docType || "").trim(),
+    supplier: String(r.supplier || "").trim(),
+    name: String(r.name || "").trim(),
+    invoiceNumber: String(r.invoiceNumber || "").replace(/\s+/g, "").trim(),
+    date: isoDate(r.date),
+    total: num(r.total), vat: num(r.vat), net: num(r.net),
+    exempt: !!r.exempt,
+    amount: num(r.amount),
+    note: String(r.note || "").trim()
+  };
+  if (out.exempt) { out.vat = 0; if (out.total != null) out.net = out.total; }
+  if (out.total != null && out.vat != null && out.net == null) out.net = Math.round((out.total - out.vat) * 100) / 100;
+  if (out.kind === "other" && !out.name) out.name = out.supplier;
+  return out;
+}
+
+async function callModel(model, key, pages) {
+  const parts = [{ text: PROMPT }];
+  for (const p of pages.slice(0, 4)) parts.push({ inline_data: { mime_type: "image/jpeg", data: p.slice(p.indexOf(",") + 1) } });
+  const res = await fetch(API + encodeURIComponent(model) + ":generateContent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: "application/json", temperature: 0 } })
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const err = new Error(`Gemini ${res.status}`); err.status = res.status; err.body = body; throw err;
+  }
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  return JSON.parse(json);
+}
+
+// מחזיר {ok, result, message}
+export async function recognize(pages, settings) {
+  const key = (settings.geminiKey || "").trim();
+  if (!key) return { ok: false, message: "לא הוגדר מפתח זיהוי, אז ממלאים ידנית. אפשר להוסיף מפתח בהגדרות." };
+  const models = [settings.geminiModel || FALLBACK_MODELS[0], ...FALLBACK_MODELS].filter((m, i, a) => m && a.indexOf(m) === i);
+  let last;
+  for (const m of models) {
+    try {
+      return { ok: true, result: normalizeResult(await callModel(m, key, pages)), model: m };
+    } catch (e) {
+      last = e;
+      if (e.status === 404 || e.status === 400 && /model/i.test(e.body || "")) continue; // דגם לא קיים → הבא
+      break;
+    }
+  }
+  let message = "הזיהוי לא הצליח, אז ממלאים ידנית.";
+  if (last?.status === 429) message = "הגעת למכסת הזיהוי החינמית לרגע זה. אפשר למלא ידנית או לנסות שוב בעוד דקה.";
+  else if (last?.status === 400 || last?.status === 403) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית.";
+  else if (last instanceof SyntaxError) message = "התשובה מהזיהוי לא הייתה ברורה, אז ממלאים ידנית.";
+  return { ok: false, message };
+}
