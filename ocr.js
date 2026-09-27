@@ -85,20 +85,22 @@ export async function recognize(pages, settings) {
   const key = (settings.geminiKey || "").trim();
   if (!key) return { ok: false, message: "לא הוגדר מפתח זיהוי, אז ממלאים ידנית. אפשר להוסיף מפתח בהגדרות." };
   const models = [settings.geminiModel || FALLBACK_MODELS[0], ...FALLBACK_MODELS].filter((m, i, a) => m && a.indexOf(m) === i);
-  let last;
+  let last, hitQuota = false;
   for (const m of models) {
     try {
       return { ok: true, result: normalizeResult(await callModel(m, key, pages)), model: m };
     } catch (e) {
       last = e;
       // דגם לא קיים / לא נתמך / עמוס → מנסים את הבא
+      // מכסה נגמרה (429) → לכל דגם מכסה חינמית נפרדת, אז עוברים לבא
+      if (e.status === 429) { hitQuota = true; continue; }
       if ([404, 500, 503].includes(e.status) || (e.status === 400 && /model|not found|not supported/i.test(e.body || ""))) continue;
       break;
     }
   }
   const detail = last ? ` (קוד: ${last.status || last.name || "?"}${last.body ? " · " + (safeMsg(last.body)) : ""})` : "";
   let message = "הזיהוי לא הצליח, אז ממלאים ידנית." + detail;
-  if (last?.status === 429) message = "הגעת למכסת הזיהוי החינמית לרגע זה. אפשר למלא ידנית או לנסות שוב בעוד דקה.";
+  if (hitQuota || last?.status === 429) message = "נגמרה לעכשיו מכסת הזיהוי החינמית. ממלאים ידנית, או מנסים שוב בעוד כמה דקות. המכסה היומית מתאפסת כל יום ב-10:00 בבוקר.";
   else if (last?.status === 400 || last?.status === 403) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית." + detail;
   else if (last instanceof SyntaxError) message = "התשובה מהזיהוי לא הייתה ברורה, אז ממלאים ידנית.";
   return { ok: false, message };
