@@ -27,7 +27,7 @@ window.NAYERET_CONFIG = {
   */
 
   // המשתמש המשותף שנוצר ב-Firebase Authentication. בכניסה מקלידים רק את הסיסמה.
-  sharedEmail: "office@inbar.app",
+  sharedEmail: "office@nayeret.app",
 
   // מזהה העסק. כרגע עסק אחד; מוכן להוספת עסקים בעתיד.
   businessId: "nayeret",
