@@ -54,11 +54,21 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /* ---------- טבלה ב-PDF (A4 לרוחב), מצוירת על canvas כדי שהעברית תוצג נכון ---------- */
+const TW = 1123, TH_ = 794;   // A4 לרוחב ב-px
+const PW_ = 794, PH_ = 1123;  // A4 לאורך ב-px
+
 export async function buildTablePdf(rows, kind, meta) {
   const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [TW, TH_], compress: true });
+  await renderTablePages(pdf, rows, kind, meta, {});
+  return pdf.output("blob");
+}
+
+// מוסיף את עמודי הטבלה ל-pdf. מחזיר את מיקום כל שורה (לקישורים) ואת מספר העמודים
+async function renderTablePages(pdf, rows, kind, meta, { linked = false }) {
   await document.fonts?.ready;
   const cols = COLS[kind];
-  const W = 1123, H = 794, S = 2, M = 34;          // A4 לרוחב ב-96dpi, רזולוציה כפולה
+  const W = TW, H = TH_, S = 2, M = 34;
   const tableW = W - 2 * M;
   const baseW = cols.reduce((s, c) => s + c.w, 0);
   const widths = cols.map((c) => c.w * tableW / baseW);
@@ -66,7 +76,8 @@ export async function buildTablePdf(rows, kind, meta) {
   const perPage = Math.floor((H - M - HEAD - TH - FOOT - TOT - M) / RH);
   const pagesCount = Math.max(1, Math.ceil(rows.length / perPage));
   const thumbs = await Promise.all(rows.map((r) => r.thumb ? loadImage(r.thumb).catch(() => null) : null));
-  const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H], compress: true });
+  const startPage = pdf.getNumberOfPages() === 1 && !pdf.__used ? 1 : pdf.getNumberOfPages() + 1;
+  const rowRects = [];
 
   for (let p = 0; p < pagesCount; p++) {
     const c = document.createElement("canvas"); c.width = W * S; c.height = H * S;
@@ -99,6 +110,7 @@ export async function buildTablePdf(rows, kind, meta) {
     slice.forEach((r, k) => {
       const ri = p * perPage + k;
       if (k % 2 === 1) { ctx.fillStyle = "#F6FBFD"; ctx.fillRect(M, y, tableW, RH); }
+      rowRects.push({ ri, page: startPage + p, x: M, y, w: tableW, h: RH });
       x = W - M;
       cols.forEach((col, i) => {
         const w = widths[i]; x -= w;
@@ -107,7 +119,7 @@ export async function buildTablePdf(rows, kind, meta) {
           if (im) {
             const th = RH - 10, tw = Math.min(w - 12, th * im.naturalWidth / im.naturalHeight);
             ctx.drawImage(im, x + (w - tw) / 2, y + 5, tw, th);
-            ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.strokeRect(x + (w - tw) / 2, y + 5, tw, th);
+            ctx.strokeStyle = linked ? TURQ : LINE; ctx.lineWidth = linked ? 1.5 : 1; ctx.strokeRect(x + (w - tw) / 2, y + 5, tw, th);
           }
           return;
         }
@@ -138,11 +150,13 @@ export async function buildTablePdf(rows, kind, meta) {
     ctx.fillStyle = INK2; ctx.font = `400 11px ${FONT}`;
     ctx.textAlign = "right"; ctx.fillText(`הופק ${fmtDate(localIso(new Date()))}`, W - M, H - M + 6);
     ctx.textAlign = "left"; ctx.fillText(`עמוד ${p + 1} מתוך ${pagesCount}`, M, H - M + 6);
+    if (linked) { ctx.textAlign = "center"; ctx.fillStyle = BLUE; ctx.font = `600 12px ${FONT}`; ctx.fillText("לחיצה על שורה פותחת את המסמך שלה בגודל מלא", W / 2, H - M + 6); }
 
-    if (p > 0) pdf.addPage([W, H], "landscape");
+    if (startPage + p > 1) pdf.addPage([W, H], "landscape");
+    pdf.__used = true;
     pdf.addImage(c.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, W, H, undefined, "FAST");
   }
-  return pdf.output("blob");
+  return { rowRects, startPage, pagesCount };
 }
 
 /* ---------- חותמת לעמוד מסמך: מספר שורה + פרטים, בעברית ---------- */
@@ -196,6 +210,61 @@ export async function buildDocsPdf(rows, kind, getPages, onProgress, opts = {}) 
     }
   }
   if (first) { pdf.setFontSize(14); pdf.text("No documents", 20, 30); }
+  return pdf.output("blob");
+}
+
+/* ---------- כפתור "חזרה לטבלה" לעמודי המסמכים ---------- */
+function backButtonImage() {
+  const S = 3, h = 30, text = "חזרה לטבלה ↩";
+  const c0 = document.createElement("canvas").getContext("2d"); c0.font = `700 13px ${FONT}`;
+  const w = Math.ceil(c0.measureText(text).width + 28);
+  const c = document.createElement("canvas"); c.width = w * S; c.height = h * S;
+  const ctx = c.getContext("2d"); ctx.scale(S, S); ctx.direction = "rtl";
+  ctx.fillStyle = BLUE; roundRect(ctx, 0.5, 0.5, w - 1, h - 1, 8); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = `700 13px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, w / 2, h / 2 + 1);
+  return { url: c.toDataURL("image/png"), w, h };
+}
+
+/* ---------- קובץ משולב: טבלה עם קישורים + כל המסמכים בגודל מלא ---------- */
+export async function buildCombinedPdf(rows, kind, meta, getPages, onProgress) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [TW, TH_], compress: true });
+  const { rowRects } = await renderTablePages(pdf, rows, kind, meta, { linked: true });
+  const back = backButtonImage();
+  const M = 30, TOP = 60;
+  const firstPageOf = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    onProgress && onProgress(i + 1, rows.length);
+    const pages = await getPages(r.id);
+    const who = kind === "invoice" ? r.supplier : [r.docType, r.name].filter(Boolean).join(" · ");
+    const amt = kind === "invoice" ? r.total : r.amount;
+    const tablePage = rowRects.find((x) => x.ri === i)?.page || 1;
+    for (let j = 0; j < pages.length; j++) {
+      pdf.addPage([PW_, PH_], "portrait");
+      const pageNo = pdf.getNumberOfPages();
+      if (j === 0) firstPageOf[i] = pageNo;
+      const im = await loadImage(pages[j].data);
+      const aw = PW_ - 2 * M, ah = PH_ - TOP - M;
+      const sc = Math.min(aw / im.naturalWidth, ah / im.naturalHeight);
+      const w = im.naturalWidth * sc, h = im.naturalHeight * sc;
+      pdf.addImage(pages[j].data, "JPEG", (PW_ - w) / 2, TOP + (ah - h) / 2, w, h, undefined, "FAST");
+      const parts = [who, fmtDate(r.date), amt != null ? "₪" + fmtMoney(amt) : "", kind === "invoice" && r.invoiceNumber ? "מס' " + r.invoiceNumber : "", pages.length > 1 ? `דף ${j + 1}/${pages.length}` : ""];
+      const st = stampImage(parts.filter(Boolean).join("  ·  "), i + 1);
+      pdf.addImage(st.url, "PNG", PW_ - M - st.w, 16, st.w, st.h);
+      pdf.addImage(back.url, "PNG", M, 16, back.w, back.h);
+      pdf.link(M, 16, back.w, back.h, { pageNumber: tablePage });
+    }
+    if (!pages.length) firstPageOf[i] = null;
+  }
+  // קישורים מכל שורה בטבלה לעמוד המסמך שלה
+  for (const rr of rowRects) {
+    const target = firstPageOf[rr.ri];
+    if (!target) continue;
+    pdf.setPage(rr.page);
+    pdf.link(rr.x, rr.y, rr.w, rr.h, { pageNumber: target });
+  }
   return pdf.output("blob");
 }
 

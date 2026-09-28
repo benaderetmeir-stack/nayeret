@@ -2,7 +2,7 @@
 import { FirebaseStore, DemoStore } from "./store.js";
 import { fileToPages, makeThumb, isPdf } from "./images.js";
 import { recognize } from "./ocr.js";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso } from "./reports.js";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso } from "./reports.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -214,7 +214,7 @@ $("selMakeFile").onclick = async () => {
   const rows = state.rows.filter((r) => state.selected.has(r.id));
   const kind = state.view;
   setView("reports");
-  await generate([{ kind, rows }], { period: `${rows.length} מסמכים שנבחרו`, fileTag: "נבחרים", outputs: { table: true, docs: true, excel: true } });
+  await generate([{ kind, rows }], { period: `${rows.length} מסמכים שנבחרו`, fileTag: "נבחרים", outputs: { combined: true, table: false, docs: false, excel: true } });
 };
 
 async function deleteRow(row) {
@@ -580,7 +580,7 @@ function readReportForm() {
     kinds: KINDS.filter((k) => $(k === "invoice" ? "rKindInv" : "rKindOther").checked),
     by: document.querySelector('input[name="rBy"]:checked').value,
     month: $("rMonth").value, from: $("rFrom").value, to: $("rTo").value,
-    outputs: ["table", "docs", "excel"].filter((k) => $({ table: "oTable", docs: "oDocs", excel: "oExcel" }[k]).checked)
+    outputs: ["combined", "table", "docs", "excel"].filter((k) => $({ combined: "oCombined", table: "oTable", docs: "oDocs", excel: "oExcel" }[k]).checked)
   };
 }
 const kindsOf = (h) => h.kinds || (h.kind ? [h.kind] : KINDS);
@@ -603,7 +603,7 @@ async function runReport(p) {
   const withRows = sections.filter((s) => s.rows.length);
   if (!withRows.length) { $("rResult").hidden = true; return toast("אין מסמכים בטווח הזה"); }
   const empty = sections.filter((s) => !s.rows.length).map((s) => KIND_LABEL[s.kind]);
-  await generate(withRows, { period, fileTag: tag, outputs: { table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
+  await generate(withRows, { period, fileTag: tag, outputs: { combined: p.outputs.includes("combined"), table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
 
 }
 
@@ -619,6 +619,9 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
       const label = KIND_LABEL[kind];
       const meta = { title: label, subtitle: period, bizName };
       const base = safeName(`${label} ${fileTag}`);
+      if (outputs.combined) {
+        files.push({ name: `${base} - טבלה ו${kind === "invoice" ? "חשבוניות" : "מסמכים"} (${stamp}).pdf`, label: `${label}: טבלה + כל המסמכים בקובץ אחד`, blob: await buildCombinedPdf(rows, kind, meta, (id) => state.store.getPages(id), (i, n) => { btn.textContent = `${label}: מסמך ${i} מתוך ${n}…`; $("rResultInfo").textContent = `${label}: מכין מסמך ${i} מתוך ${n}…`; }) });
+      }
       if (outputs.table) { btn.textContent = `מפיק טבלת ${label}…`; files.push({ name: `${base} - טבלה (${stamp}).pdf`, blob: await buildTablePdf(rows, kind, meta), label: `טבלת ${label} ב-PDF` }); }
       if (outputs.docs) {
         files.push({ name: `${base} - מסמכים (${stamp}).pdf`, label: `${label}: כל המסמכים ב-PDF`, blob: await buildDocsPdf(rows, kind, (id) => state.store.getPages(id), (i, n) => { btn.textContent = `${label}: מסמך ${i} מתוך ${n}…`; $("rResultInfo").textContent = `${label}: מכין מסמך ${i} מתוך ${n}…`; }) });
