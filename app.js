@@ -400,6 +400,29 @@ function setKind(kind) {
 }
 document.querySelectorAll('input[name="rvKind"]').forEach((r) => r.addEventListener("change", () => { carryOver(r.value); setKind(r.value); syncDate(); }));
 
+// סוגי ניירת אחרת: רשימה קבועה + סוגים שהוקלדו בעבר + "אחר"
+const BASE_DOC_TYPES = ["תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח"];
+const OTHER = "__other__";
+function docTypeList() {
+  const custom = (state.settings.customDocTypes || []).filter((t) => !BASE_DOC_TYPES.includes(t));
+  return [...BASE_DOC_TYPES, ...custom];
+}
+function setDocType(value) {
+  const sel = $("rvDocTypeSel"), list = docTypeList();
+  const v = (value || "").trim();
+  const extra = v && !list.includes(v) ? [v] : [];
+  sel.innerHTML = `<option value="">בחרי סוג מסמך…</option>` + [...list, ...extra].map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("") + `<option value="${OTHER}">אחר (לכתוב בעצמי)…</option>`;
+  sel.value = v;
+  $("rvDocType").value = v;
+  $("rvDocTypeOtherBox").hidden = true;
+}
+function currentDocType() { return $("rvDocTypeSel").value === OTHER ? $("rvDocType").value.trim() : $("rvDocTypeSel").value; }
+$("rvDocTypeSel").addEventListener("change", () => {
+  const other = $("rvDocTypeSel").value === OTHER;
+  $("rvDocTypeOtherBox").hidden = !other;
+  if (other) { $("rvDocType").value = ""; setTimeout(() => $("rvDocType").focus(), 30); }
+});
+
 // מעבר בין חשבונית לניירת אחרת: הפרטים עוברים איתו, לא ממלאים מחדש
 function carryOver(toKind) {
   const src = up.src || {};
@@ -416,7 +439,7 @@ function carryOver(toKind) {
   } else {
     setIfEmpty($("rvName"), $("rvSupplier").value || src.name || src.supplier);
     setIfEmpty($("rvAmount"), $("rvTotal").value || src.amount || src.total);
-    setIfEmpty($("rvDocType"), src.kind === "other" ? src.docType : "");
+    if (!currentDocType() && src.kind === "other" && src.docType) setDocType(src.docType);
     $("rvDateO").value = $("rvDateI").value || $("rvDateO").value;
   }
 }
@@ -434,7 +457,7 @@ function fillReview(d, rec) {
   $("rvDateI").value = d.date || ""; $("rvDateO").value = d.date || "";
   $("rvExempt").checked = !!d.exempt;
   $("rvTotal").value = d.total ?? ""; $("rvVat").value = d.vat ?? ""; $("rvNet").value = d.net ?? "";
-  $("rvDocType").value = d.docType && d.kind === "other" ? d.docType : "";
+  setDocType(d.docType && d.kind === "other" ? d.docType : "");
   $("rvName").value = d.name || ""; $("rvAmount").value = d.amount ?? "";
   $("rvNote").value = d.note || "";
   applyExempt();
@@ -442,7 +465,7 @@ function fillReview(d, rec) {
   else syncDate();
   $("rvDup").hidden = true; up.dupFound = null;
   checkDup();
-  setTimeout(() => (d.supplier ? $("rvSave") : (curKind() === "invoice" ? $("rvSupplier") : $("rvDocType"))).focus({ preventScroll: true }), 60);
+  setTimeout(() => (d.supplier ? $("rvSave") : (curKind() === "invoice" ? $("rvSupplier") : $("rvDocTypeSel"))).focus({ preventScroll: true }), 60);
 }
 function renderReviewImg() {
   $("rvImg").src = up.pages[up.pageIdx] || "";
@@ -536,8 +559,13 @@ $("upReview").addEventListener("submit", async (e) => {
     if (!date) return fieldError("rvDateI", "חסר תאריך");
     if (meta.total == null) return fieldError("rvTotal", "חסר סכום כולל");
   } else {
-    Object.assign(meta, { docType: $("rvDocType").value.trim(), name: $("rvName").value.trim(), amount: numVal($("rvAmount")), supplier: "", invoiceNumber: "", total: null, vat: null, net: null, exempt: false });
-    if (!meta.docType) return fieldError("rvDocType", "חסר סוג מסמך");
+    Object.assign(meta, { docType: currentDocType(), name: $("rvName").value.trim(), amount: numVal($("rvAmount")), supplier: "", invoiceNumber: "", total: null, vat: null, net: null, exempt: false });
+    if (!meta.docType) return fieldError($("rvDocTypeSel").value === OTHER ? "rvDocType" : "rvDocTypeSel", "חסר סוג מסמך");
+    if (!docTypeList().includes(meta.docType)) {
+      const custom = [...(state.settings.customDocTypes || []), meta.docType].slice(-30);
+      state.settings.customDocTypes = custom;
+      state.store.saveSettings({ customDocTypes: custom }).catch(() => {});
+    }
     if (!date) return fieldError("rvDateO", "חסר תאריך");
   }
   if (up.dupFound && !(await confirmBox("נראה שהחשבונית הזו כבר שמורה במערכת (אותו מספר ואותו סכום). לשמור בכל זאת?", "שמור בכל זאת", false))) return;

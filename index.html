@@ -269,11 +269,11 @@
       </div>
 
       <div class="grid2" id="rvOtherFields" hidden>
-        <label class="field"><span>סוג מסמך</span>
-          <input id="rvDocType" list="docTypes" autocomplete="off">
-          <datalist id="docTypes">
-            <option value="העברת משכורת"><option value="תלוש שכר"><option value="דף בנק"><option value="תעודת משלוח"><option value="קבלה"><option value="אישור תשלום"><option value="אחר">
-          </datalist>
+        <label class="field span2"><span>סוג מסמך</span>
+          <select id="rvDocTypeSel"></select>
+        </label>
+        <label class="field span2" id="rvDocTypeOtherBox" hidden><span>איזה מסמך? (כתבי בעצמך)</span>
+          <input id="rvDocType" autocomplete="off" placeholder="למשל: אישור ניכוי מס במקור">
         </label>
         <label class="field"><span>תאריך</span><input id="rvDateO" type="date"></label>
         <label class="field span2"><span>שם</span><input id="rvName" autocomplete="off"></label>

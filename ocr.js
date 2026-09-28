@@ -6,7 +6,7 @@ const PROMPT = `You read Israeli business paperwork (Hebrew or English) for an a
 Look at the page images (all pages belong to ONE document) and return ONLY a JSON object:
 {
   "kind": "invoice" | "other",
-  "docType": string,          // Hebrew label, e.g. "חשבונית מס", "חשבונית מס קבלה", "קבלה", "תלוש שכר", "דף בנק", "העברת משכורת", "תעודת משלוח", "אישור תשלום"
+  "docType": string,          // for "other" choose the closest from: "תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח"; if none fits, a short Hebrew label. For invoices: "חשבונית מס", "חשבונית מס קבלה", "קבלה"
   "supplier": string,         // for invoices/receipts: issuing business name as printed
   "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
@@ -21,6 +21,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
 Rules:
 - "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי), including a plain receipt (קבלה) from a VAT-exempt dealer (עוסק פטור), which is the only document such a dealer issues.
 - Any document issued by a business that shows an amount paid for goods or services counts as "invoice". When unsure between the two, choose "invoice".
+- A pension / provident fund report (דוח קופות גמל, פנסיה, קרן השתלמות, הפרשות מעסיק) is "דוח קופות גמל / פנסיה", NOT a payslip. A payslip (תלוש שכר) is for one employee for one month with gross/net salary.
 - "other" = payslips, bank statements, salary transfers, delivery notes without payment, payment confirmations and anything else.
 - Numbers as plain numbers without currency signs or thousands separators. Credit notes (זיכוי) as negative totals.
 - Dates in Israel are written day/month/year.

@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   geminiKey: "",
   geminiModel: "gemini-flash-latest",
   closedMonths: [],
+  customDocTypes: [],
   recentEmails: []
 };
 
