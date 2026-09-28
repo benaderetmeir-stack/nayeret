@@ -562,11 +562,12 @@ let reportsReady = false;
 function initReports() {
   if (!reportsReady) {
     reportsReady = true;
-    $("rMonth").value = state.month;
+    $("rMonth").value = state.month; $("rMonthFrom").value = shiftMonth(state.month, -1); $("rMonthTo").value = state.month;
     const [a, b] = monthBounds(state.month); $("rFrom").value = a; $("rTo").value = b;
     document.querySelectorAll('input[name="rBy"]').forEach((r) => r.addEventListener("change", () => {
-      const byMonth = document.querySelector('input[name="rBy"]:checked').value === "month";
-      $("rMonthBox").hidden = !byMonth; $("rRangeBox").hidden = byMonth;
+      const by = document.querySelector('input[name="rBy"]:checked').value;
+      $("rMonthBox").hidden = by !== "month"; $("rMonthsBox").hidden = by !== "months";
+      $("rRangeBox").hidden = by !== "range"; $("rRangeHint").hidden = by !== "range";
     }));
     $("rRun").onclick = () => runReport(readReportForm());
     $("rShare").onclick = () => shareFiles(state.lastFiles, state.lastTitle);
@@ -580,6 +581,7 @@ function readReportForm() {
     kinds: KINDS.filter((k) => $(k === "invoice" ? "rKindInv" : "rKindOther").checked),
     by: document.querySelector('input[name="rBy"]:checked').value,
     month: $("rMonth").value, from: $("rFrom").value, to: $("rTo").value,
+    monthFrom: $("rMonthFrom").value, monthTo: $("rMonthTo").value,
     outputs: ["combined", "table", "docs", "excel"].filter((k) => $({ combined: "oCombined", table: "oTable", docs: "oDocs", excel: "oExcel" }[k]).checked)
   };
 }
@@ -594,6 +596,14 @@ async function runReport(p) {
   if (p.by === "month") {
     if (!p.month) return toast("בחרי חודש");
     rows = await state.store.listByMonth(p.month); period = `תיקיית ${monthName(p.month)}`; tag = p.month;
+  } else if (p.by === "months") {
+    if (!p.monthFrom || !p.monthTo) return toast("בחרי חודש התחלה וחודש סיום");
+    if (p.monthFrom > p.monthTo) return toast("חודש ההתחלה אחרי חודש הסיום");
+    const months = [];
+    for (let m = p.monthFrom; m <= p.monthTo && months.length < 36; m = shiftMonth(m, 1)) months.push(m);
+    rows = (await Promise.all(months.map((m) => state.store.listByMonth(m)))).flat();
+    period = months.length === 1 ? `תיקיית ${monthName(months[0])}` : `תיקיות ${shortMonth(p.monthFrom)} עד ${shortMonth(p.monthTo)}`;
+    tag = months.length === 1 ? p.monthFrom : `${p.monthFrom}_${p.monthTo}`;
   } else {
     if (!p.from || !p.to) return toast("בחרי טווח תאריכים");
     if (p.from > p.to) return toast("תאריך ההתחלה אחרי תאריך הסיום");

@@ -125,11 +125,17 @@
           </div>
           <div class="seg" role="radiogroup" aria-label="לפי">
             <label><input type="radio" name="rBy" value="month" checked><span>לפי חודש (תיקייה)</span></label>
+            <label><input type="radio" name="rBy" value="months"><span>כמה חודשים (תיקיות)</span></label>
             <label><input type="radio" name="rBy" value="range"><span>לפי טווח תאריכים</span></label>
           </div>
           <div class="report-dates" id="rMonthBox">
             <label class="field"><span>חודש</span><input type="month" id="rMonth"></label>
           </div>
+          <div class="report-dates" id="rMonthsBox" hidden>
+            <label class="field"><span>מתיקיית חודש</span><input type="month" id="rMonthFrom"></label>
+            <label class="field"><span>עד תיקיית חודש</span><input type="month" id="rMonthTo"></label>
+          </div>
+          <p class="hint" id="rRangeHint" hidden>שימי לב: לפי תאריכים נאספים מסמכים לפי התאריך שעליהם. מסמך שהגיע באיחור ושויך לתיקייה מאוחרת יותר לא ייכלל. לדו-חודשי או חצי שנתי עדיף "כמה חודשים".</p>
           <div class="report-dates" id="rRangeBox" hidden>
             <label class="field"><span>מתאריך</span><input type="date" id="rFrom"></label>
             <label class="field"><span>עד תאריך</span><input type="date" id="rTo"></label>
