@@ -348,3 +348,13 @@ button, input, select { font: inherit; color: inherit; }
   .table-wrap { display: block !important; box-shadow: none; border: 0; }
   .cards { display: none !important; }
 }
+
+/* ===== בחירת חודש ===== */
+.mp-year { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.mp-year span { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.mp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mp-grid button { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 12px 4px; font-weight: 600; cursor: pointer; color: var(--ink); min-height: 48px; }
+.mp-grid button:hover { border-color: var(--turq); }
+.mp-grid button.is-current { background: var(--turq); color: #fff; border-color: var(--turq); }
+.mp-grid button.is-closed::after { content: " ✓"; color: var(--turq-ink); }
+.mp-grid button.is-current.is-closed::after { color: #fff; }

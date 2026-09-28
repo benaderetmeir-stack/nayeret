@@ -97,8 +97,21 @@ function setView(v) {
 /* ======================= טבלאות ======================= */
 $("monthPrev").onclick = () => { state.month = shiftMonth(state.month, -1); loadRows(); };
 $("monthNext").onclick = () => { state.month = shiftMonth(state.month, 1); loadRows(); };
-$("monthLabel").onclick = () => { const p = $("monthPicker"); p.value = state.month; p.showPicker ? p.showPicker() : p.click(); };
-$("monthPicker").onchange = (e) => { if (e.target.value) { state.month = e.target.value; loadRows(); } };
+// בחירת חודש: חלון עם שנה ו-12 חודשים (עובד גם באייפון)
+let mpYear = 0;
+$("monthLabel").onclick = () => { mpYear = Number(state.month.slice(0, 4)); renderMonthPicker(); $("monthDlg").showModal(); };
+function renderMonthPicker() {
+  $("mpYear").textContent = mpYear;
+  const names = Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat("he-IL", { month: "long" }).format(new Date(2000, i, 1)));
+  $("mpGrid").innerHTML = names.map((n, i) => {
+    const ym = `${mpYear}-${String(i + 1).padStart(2, "0")}`;
+    return `<button type="button" data-ym="${ym}" class="${ym === state.month ? "is-current" : ""}${isClosed(ym) ? " is-closed" : ""}">${n}</button>`;
+  }).join("");
+}
+$("mpYearPrev").onclick = () => { mpYear--; renderMonthPicker(); };
+$("mpYearNext").onclick = () => { mpYear++; renderMonthPicker(); };
+$("mpGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-ym]"); if (!b) return; state.month = b.dataset.ym; $("monthDlg").close(); loadRows(); });
+$("mpToday").onclick = () => { state.month = ymOf(new Date()); $("monthDlg").close(); loadRows(); };
 
 $("closeMonthBtn").onclick = async () => {
   const m = state.month, closed = isClosed(m);

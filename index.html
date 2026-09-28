@@ -311,6 +311,23 @@
   <div class="vw-body" id="vwBody"></div>
 </dialog>
 
+<!-- ===== בחירת חודש ===== -->
+<dialog id="monthDlg" class="dlg dlg-small">
+  <div class="dlg-head">
+    <h2>בחירת חודש</h2>
+    <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+  </div>
+  <div class="mp-year">
+    <button class="icon-btn" id="mpYearNext" aria-label="שנה הבאה">‹</button>
+    <span id="mpYear">2026</span>
+    <button class="icon-btn" id="mpYearPrev" aria-label="שנה קודמת">›</button>
+  </div>
+  <div class="mp-grid" id="mpGrid"></div>
+  <div class="row-actions" style="margin-top:12px">
+    <button class="btn btn-ghost btn-sm" id="mpToday">החודש הנוכחי</button>
+  </div>
+</dialog>
+
 <!-- ===== אישור ===== -->
 <dialog id="confirmDlg" class="dlg dlg-small">
   <p id="cfText"></p>
