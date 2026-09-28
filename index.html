@@ -52,6 +52,7 @@
       </nav>
     </div>
     <div class="demo-banner" id="demoBanner" hidden>מצב תצוגה: הנתונים כאן לדוגמה בלבד ולא נשמרים</div>
+    <button class="usage-banner" id="usageBanner" hidden></button>
   </header>
 
   <main class="main">
@@ -164,6 +165,15 @@
 
     <!-- ===== הגדרות ===== -->
     <section id="settingsView" class="view" hidden>
+      <div class="panel" id="usagePanel">
+        <h2 class="panel-title">מקום באחסון</h2>
+        <div class="meter" aria-hidden="true"><div class="meter-fill" id="usageFill"></div></div>
+        <div class="meter-row">
+          <strong id="usageText">בודק…</strong>
+          <span class="hint" id="usageSub"></span>
+        </div>
+        <p class="notice notice-warn" id="usageWarn" hidden></p>
+      </div>
       <div class="panel">
         <h2 class="panel-title">פרטי העסק</h2>
         <label class="field"><span>שם העסק</span><input id="sBizName"></label>
