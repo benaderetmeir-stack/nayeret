@@ -12,6 +12,11 @@ const fbUrl = (m) => `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}
  *  addReport(entry), listReports()
  * ------------------------------------------------------------- */
 
+export const FREE_BYTES = 1024 ** 3; // 1GB במסלול החינמי של Firebase
+const USAGE_V = 1;
+// גודל משוער של מסמך באחסון: הדפים + התמונה הממוזערת + פרטים
+export const docBytes = (meta, pages) => pages.reduce((n, p) => n + (p?.length || 0), 0) + (meta.thumb?.length || 0) + 1024;
+
 export const DEFAULT_SETTINGS = {
   businessName: "INBAR Professional Cosmetic Center",
   vatRate: 18,
@@ -73,23 +78,62 @@ export class FirebaseStore {
     for (let i = 0; i < pages.length; i++) {
       await setDoc(doc(collection(ref, "pages"), String(i).padStart(3, "0")), { i, data: pages[i] });
     }
-    await setDoc(ref, { ...meta, pageCount: pages.length, createdAt: Date.now() });
+    const sizeBytes = docBytes(meta, pages);
+    await setDoc(ref, { ...meta, pageCount: pages.length, sizeBytes, createdAt: Date.now() });
+    await this._bump(sizeBytes, 1);
     return ref.id;
   }
   async updateDoc(id, patch) { await this.F.updateDoc(this._doc("docs", id), patch); }
   async deleteDoc(id) {
-    const { getDocs, collection, deleteDoc } = this.F;
+    const { getDoc, getDocs, collection, deleteDoc } = this.F;
     const ref = this._doc("docs", id);
+    const snap = await getDoc(ref);
     await deleteDoc(ref); // קודם הרשומה, כך שגם אם המחיקה נקטעת היא לא תופיע
     const pages = await getDocs(collection(ref, "pages"));
+    const size = snap.data()?.sizeBytes ?? docBytes(snap.data() || {}, pages.docs.map((p) => p.data().data));
     await Promise.all(pages.docs.map((p) => deleteDoc(p.ref)));
+    await this._bump(-size, -1);
   }
   async getPages(id) {
     const { getDocs, collection } = this.F;
     const snap = await getDocs(collection(this._doc("docs", id), "pages"));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.i - b.i);
   }
-  async deletePage(docId, pageId) { await this.F.deleteDoc(this.F.doc(this._doc("docs", docId), "pages", pageId)); }
+  async deletePage(docId, pageId) {
+    const { getDoc, deleteDoc, updateDoc, increment } = this.F;
+    const pref = this.F.doc(this._doc("docs", docId), "pages", pageId);
+    const len = (await getDoc(pref)).data()?.data?.length || 0;
+    await deleteDoc(pref);
+    await updateDoc(this._doc("docs", docId), { sizeBytes: increment(-len) }).catch(() => {});
+    await this._bump(-len, 0);
+  }
+
+  // מונה שימוש באחסון: נשמר בהגדרות ומתעדכן בכל העלאה ומחיקה
+  async _bump(bytes, docs) {
+    const { setDoc, increment } = this.F;
+    await setDoc(this._doc("settings", "main"), { usage: { bytes: increment(bytes), docs: increment(docs) } }, { merge: true }).catch((e) => console.warn("usage", e));
+  }
+  async getUsage() {
+    const s = await this.F.getDoc(this._doc("settings", "main"));
+    const u = s.data()?.usage;
+    if (u && u.v === USAGE_V) return { bytes: Math.max(0, u.bytes || 0), docs: Math.max(0, u.docs || 0) };
+    // חישוב ראשוני: עובר פעם אחת על כל המסמכים
+    const { getDocs, collection, updateDoc, setDoc } = this.F;
+    const all = await getDocs(this._col("docs"));
+    let bytes = 0;
+    for (const d of all.docs) {
+      let size = d.data().sizeBytes;
+      if (size == null) {
+        const pages = await getDocs(collection(d.ref, "pages"));
+        size = docBytes(d.data(), pages.docs.map((p) => p.data().data));
+        await updateDoc(d.ref, { sizeBytes: size }).catch(() => {});
+      }
+      bytes += size;
+    }
+    const usage = { v: USAGE_V, bytes, docs: all.size };
+    await setDoc(this._doc("settings", "main"), { usage }, { merge: true });
+    return { bytes, docs: all.size };
+  }
 
   async addReport(entry) { await this.F.addDoc(this._col("reports"), { ...entry, createdAt: Date.now() }); }
   async listReports() {
@@ -121,6 +165,10 @@ export class DemoStore {
   async deleteDoc(id) { this.docs = this.docs.filter((d) => d.id !== id); delete this.pages[id]; }
   async getPages(id) { return (this.pages[id] || []).slice(); }
   async deletePage(docId, pageId) { this.pages[docId] = (this.pages[docId] || []).filter((p) => p.id !== pageId); }
+  async getUsage() {
+    const bytes = this.docs.reduce((n, d) => n + docBytes(d, (this.pages[d.id] || []).map((p) => p.data)), 0);
+    return { bytes, docs: this.docs.length };
+  }
   async addReport(entry) { this.reports.unshift({ ...entry, id: "r" + Date.now(), createdAt: Date.now() }); }
   async listReports() { return this.reports.slice(0, 30); }
 }

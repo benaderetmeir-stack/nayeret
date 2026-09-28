@@ -1,5 +1,5 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore } from "./store.js";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
 import { fileToPages, makeThumb, isPdf } from "./images.js";
 import { recognize } from "./ocr.js";
 import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso } from "./reports.js";
@@ -77,6 +77,7 @@ async function enterApp() {
   catch (e) { console.error(e); toast("לא הצלחתי לטעון הגדרות. ייתכן שחסרה הרשאה למשתמש.", 6000); state.settings = { closedMonths: [], recentEmails: [], vatRate: 18 }; }
   $("bizName").textContent = state.settings.businessName || "";
   setView(location.hash.replace("#", "") || "invoice");
+  refreshUsage();
 }
 
 /* ======================= ניווט ======================= */
@@ -91,7 +92,7 @@ function setView(v) {
   history.replaceState(null, "", "#" + v);
   if (v === "invoice" || v === "other") { state.selected.clear(); loadRows(); }
   if (v === "reports") initReports();
-  if (v === "settings") fillSettings();
+  if (v === "settings") { fillSettings(); refreshUsage(); }
 }
 
 /* ======================= טבלאות ======================= */
@@ -235,6 +236,7 @@ async function deleteRow(row) {
   if (!ok) return;
   await state.store.deleteDoc(row.id);
   state.selected.delete(row.id);
+  refreshUsage();
   toast("נמחק");
   await loadRows();
 }
@@ -578,6 +580,7 @@ $("upReview").addEventListener("submit", async (e) => {
     } else {
       meta.thumb = await makeThumb(up.pages[0]);
       await state.store.addDoc(meta, up.pages);
+      refreshUsage();
       toast(`נשמר בתיקיית ${monthName(month)}${meta.late ? " (באיחור)" : ""}`);
     }
     state.month = month;
@@ -723,6 +726,31 @@ async function shareFiles(files, title) {
 }
 
 /* ======================= הגדרות ======================= */
+// מד אחסון: 1GB חינם. אזהרה מ-80%, התראה חמורה מ-95%
+async function refreshUsage() {
+  let u;
+  try { u = await state.store.getUsage(); } catch (e) { console.warn(e); $("usageText").textContent = "לא הצלחתי לבדוק כרגע"; return; }
+  const pct = Math.min(100, (u.bytes / FREE_BYTES) * 100);
+  const mb = (b) => "\u2066" + mb0(b) + "\u2069";
+  const mb0 = (b) => b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + " GB" : b >= 1024 ** 2 ? Math.round(b / 1024 ** 2) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+  // עד שיש מספיק מסמכים, מניחים בזהירות כ-250KB למסמך
+  const avg = u.docs >= 20 ? u.bytes / u.docs : Math.max(u.docs ? u.bytes / u.docs : 0, 250 * 1024);
+  const left = Math.max(0, Math.floor((FREE_BYTES - u.bytes) / avg));
+  const fill = $("usageFill");
+  fill.style.width = Math.max(pct, 1) + "%";
+  fill.classList.toggle("is-warn", pct >= 80 && pct < 95);
+  fill.classList.toggle("is-full", pct >= 95);
+  $("usageText").textContent = `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% בשימוש · ${mb(u.bytes)} מתוך \u20661 GB\u2069`;
+  $("usageSub").textContent = `${u.docs} מסמכים שמורים · מקום לעוד כ-${left.toLocaleString("he-IL")} מסמכים`;
+  const warn = pct >= 95 ? `האחסון כמעט מלא (${Math.round(pct)}%). כדי להמשיך להעלות: להוריד שנים ישנות כקובץ משולב לגיבוי ולמחוק אותן, או לעבור למסלול Blaze ב-Firebase (בערך חצי שקל לחודש לכל GB נוסף).`
+    : pct >= 80 ? `האחסון מתמלא (${Math.round(pct)}%). כדאי לתכנן מראש: גיבוי ומחיקה של שנים ישנות, או מעבר למסלול Blaze ב-Firebase.` : "";
+  $("usageWarn").hidden = !warn; $("usageWarn").textContent = warn;
+  const banner = $("usageBanner");
+  banner.hidden = pct < 80;
+  banner.textContent = pct >= 95 ? `האחסון כמעט מלא (${Math.round(pct)}%) · לפרטים` : `האחסון מתמלא (${Math.round(pct)}%) · לפרטים`;
+}
+$("usageBanner").onclick = () => setView("settings");
+
 function fillSettings() {
   const s = state.settings;
   $("sBizName").value = s.businessName || ""; $("sVat").value = s.vatRate ?? 18;
