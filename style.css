@@ -381,3 +381,15 @@ button, input, select { font: inherit; color: inherit; }
 .steps { margin: 0; padding-inline-start: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .steps li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .btn-danger:disabled { opacity: .45; }
+
+/* ===== התראת חודש לא סגור ===== */
+.close-warn {
+  border: 0; border-radius: 99px; padding: 7px 14px; font-weight: 700; font-size: 13px; cursor: pointer;
+  background: #FF8A00; color: #fff; box-shadow: 0 0 0 0 rgba(255,138,0,.6); animation: warnPulse 1.4s ease-in-out infinite;
+}
+#closeMonthBtn.is-alert { background: #FF8A00; color: #fff; border-color: #FF8A00; animation: warnPulse 1.4s ease-in-out infinite; }
+@keyframes warnPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,138,0,.55); opacity: 1; } 50% { box-shadow: 0 0 0 8px rgba(255,138,0,0); opacity: .75; } }
+@media (prefers-reduced-motion: reduce) { .close-warn, #closeMonthBtn.is-alert { animation: none; } }
+.month-actions { flex-wrap: wrap; justify-content: flex-end; }
+.chips li.chip-auto { background: var(--surface-2); color: var(--ink-2); padding: 4px 12px; }
+.chips li.chip-open { background: var(--warn-bg); color: var(--warn); }

@@ -22,7 +22,47 @@ function monthName(ym) { const [y, m] = ym.split("-").map(Number); return new In
 function shiftMonth(ym, n) { const [y, m] = ym.split("-").map(Number); return ymOf(new Date(y, m - 1 + n, 1)); }
 function monthBounds(ym) { const [y, m] = ym.split("-").map(Number); const last = new Date(y, m, 0).getDate(); return [`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`]; }
 const shortMonth = (ym) => ym ? ym.split("-").reverse().join("/") : "";
-const isClosed = (ym) => (state.settings?.closedMonths || []).includes(ym);
+// חודש סגור = נסגר ידנית, או נסגר אוטומטית (עד autoClosedThrough) ולא נפתח מחדש
+function isClosed(ym) {
+  const st = state.settings || {};
+  if ((st.closedMonths || []).includes(ym)) return true;
+  return !!st.autoClosedThrough && ym <= st.autoClosedThrough && !(st.reopenedMonths || []).includes(ym);
+}
+const warnDay = () => Number(state.settings?.warnDay) || 10;
+const autoCloseDay = () => Number(state.settings?.autoCloseDay) || 16;
+async function setClosed(months, closed) {
+  const st = state.settings;
+  const c = new Set(st.closedMonths || []), r = new Set(st.reopenedMonths || []);
+  for (const m of [].concat(months)) {
+    if (closed) { c.add(m); r.delete(m); }
+    else { c.delete(m); if (st.autoClosedThrough && m <= st.autoClosedThrough) r.add(m); }
+  }
+  st.closedMonths = [...c].sort(); st.reopenedMonths = [...r].sort();
+  await state.store.saveSettings({ closedMonths: st.closedMonths, reopenedMonths: st.reopenedMonths });
+}
+// סגירה אוטומטית: מה-16 לחודש (ברירת מחדל), החודש הקודם נסגר
+async function autoCloseMonths() {
+  const now = new Date(), cur = ymOf(now);
+  const target = shiftMonth(cur, now.getDate() >= autoCloseDay() ? -1 : -2);
+  const prevThrough = state.settings.autoClosedThrough || "";
+  if (prevThrough >= target) return;
+  const newly = [];
+  for (let m = target, i = 0; i < 3 && m > prevThrough; m = shiftMonth(m, -1), i++) if (!isClosed(m)) newly.push(m);
+  state.settings.autoClosedThrough = target;
+  try { await state.store.saveSettings({ autoClosedThrough: target }); } catch (e) { console.warn(e); return; }
+  if (newly.length && prevThrough) toast(`${newly.map(monthName).join(", ")} נסגר אוטומטית (ה-${autoCloseDay()} לחודש עבר)`, 5000);
+}
+// חודשים שעברו ועדיין פתוחים, שצריך להזכיר עליהם
+function pendingMonths() {
+  const now = new Date(), cur = ymOf(now), prev = shiftMonth(cur, -1), out = [];
+  for (let i = 3; i >= 1; i--) {
+    const m = shiftMonth(cur, -i);
+    if (isClosed(m)) continue;
+    if (m === prev && now.getDate() < warnDay()) continue;
+    out.push(m);
+  }
+  return out;
+}
 function firstOpenMonthFrom(ym) { let m = ym; for (let i = 0; i < 36 && isClosed(m); i++) m = shiftMonth(m, 1); return m; }
 const amountOf = (r) => r.kind === "invoice" ? r.total : r.amount;
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -76,6 +116,7 @@ async function enterApp() {
   try { state.settings = await state.store.getSettings(); }
   catch (e) { console.error(e); toast("לא הצלחתי לטעון הגדרות. ייתכן שחסרה הרשאה למשתמש.", 6000); state.settings = { closedMonths: [], recentEmails: [], vatRate: 18 }; }
   $("bizName").textContent = state.settings.businessName || "";
+  await autoCloseMonths();
   setView(location.hash.replace("#", "") || "invoice");
   refreshUsage();
 }
@@ -117,14 +158,11 @@ $("mpToday").onclick = () => { state.month = ymOf(new Date()); $("monthDlg").clo
 $("closeMonthBtn").onclick = async () => {
   const m = state.month, closed = isClosed(m);
   const ok = await confirmBox(closed
-    ? `לפתוח מחדש את ${monthName(m)}? מסמכים חדשים מהחודש הזה ייכנסו אליו ולא לחודש הנוכחי.`
+    ? `לפתוח מחדש את ${monthName(m)}? מסמכים חדשים מהחודש הזה ייכנסו אליו ולא לחודש הנוכחי. הוא יישאר פתוח עד שתסגרי אותו שוב.`
     : `לסגור את ${monthName(m)} כנשלח לרואה החשבון? מסמך שיגיע מעכשיו עם תאריך מהחודש הזה ייכנס לחודש הפתוח הנוכחי, עם סימון איחור.`,
     closed ? "פתח מחדש" : "סגור חודש", false);
   if (!ok) return;
-  const list = new Set(state.settings.closedMonths || []);
-  closed ? list.delete(m) : list.add(m);
-  state.settings.closedMonths = [...list].sort();
-  await state.store.saveSettings({ closedMonths: state.settings.closedMonths });
+  await setClosed(m, !closed);
   toast(closed ? "החודש נפתח מחדש" : "החודש סומן כנשלח לרואה החשבון");
   renderMonthBar();
 };
@@ -136,7 +174,24 @@ function renderMonthBar() {
   const closed = isClosed(state.month);
   $("monthClosedPill").hidden = !closed;
   $("closeMonthBtn").textContent = closed ? "פתח חודש" : "סגור חודש";
+  const pend = pendingMonths();
+  $("closeMonthBtn").classList.toggle("is-alert", pend.includes(state.month));
+  const w = $("closeWarn");
+  w.hidden = !pend.length;
+  if (pend.length) {
+    const prev = shiftMonth(ymOf(new Date()), -1);
+    const auto = pend.includes(prev) ? ` · ייסגר אוטומטית ב-${autoCloseDay()}/${String(new Date().getMonth() + 1).padStart(2, "0")}` : "";
+    w.textContent = `⚠ ${pend.map((m) => monthName(m)).join(", ")} עדיין לא ${pend.length > 1 ? "נסגרו" : "נסגר"}${auto} · לסגירה`;
+  }
 }
+$("closeWarn").onclick = async () => {
+  const pend = pendingMonths(); if (!pend.length) return;
+  const names = pend.map(monthName).join(", ");
+  if (!(await confirmBox(`לסגור את ${names} כנשלח לרואה החשבון?`, "כן, סגור", false))) return;
+  await setClosed(pend, true);
+  toast(`${names} סומן כנשלח לרואה החשבון`);
+  renderMonthBar();
+};
 
 async function loadRows() {
   renderMonthBar();
@@ -674,7 +729,15 @@ async function runReport(p) {
   const withRows = sections.filter((s) => s.rows.length);
   if (!withRows.length) { $("rResult").hidden = true; return toast("אין מסמכים בטווח הזה"); }
   const empty = sections.filter((s) => !s.rows.length).map((s) => KIND_LABEL[s.kind]);
-  await generate(withRows, { period, fileTag: tag, outputs: { combined: p.outputs.includes("combined"), table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
+  const ok = await generate(withRows, { period, fileTag: tag, outputs: { combined: p.outputs.includes("combined"), table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
+  if (ok && (p.by === "month" || p.by === "months")) {
+    const cur = ymOf(new Date());
+    const ms = p.by === "month" ? [p.month] : (() => { const a = []; for (let m = p.monthFrom; m <= p.monthTo && a.length < 36; m = shiftMonth(m, 1)) a.push(m); return a; })();
+    const open = ms.filter((m) => m < cur && !isClosed(m));
+    if (open.length && await confirmBox(`לסמן את ${open.map(monthName).join(", ")} כנשלח לרואה החשבון? מסמכים שיגיעו אחר כך מהתקופה הזו ייכנסו לחודש הנוכחי עם סימון "באיחור".`, "כן, סמן כנשלח", false)) {
+      await setClosed(open, true); toast("סומן כנשלח לרואה החשבון");
+    }
+  }
 
 }
 
@@ -834,17 +897,25 @@ function fillSettings() {
   renderClosed();
 }
 function renderClosed() {
-  const list = state.settings.closedMonths || [];
-  $("sClosed").innerHTML = list.length ? list.slice().reverse().map((m) => `<li>${esc(monthName(m))}<button type="button" data-open-month="${m}">פתח</button></li>`).join("") : `<li class="hint" style="background:none;padding:0">אין חודשים סגורים.</li>`;
+  const st = state.settings;
+  const items = [];
+  if (st.autoClosedThrough) items.push(`<li class="chip-auto">נסגרו אוטומטית: כל החודשים עד ${esc(monthName(st.autoClosedThrough))}</li>`);
+  const manual = (st.closedMonths || []).filter((m) => !st.autoClosedThrough || m > st.autoClosedThrough);
+  manual.slice().reverse().forEach((m) => items.push(`<li>${esc(monthName(m))}<button type="button" data-open-month="${m}">פתח</button></li>`));
+  (st.reopenedMonths || []).slice().reverse().forEach((m) => items.push(`<li class="chip-open">${esc(monthName(m))} (נפתח מחדש)<button type="button" data-close-month="${m}">סגור</button></li>`));
+  $("sClosed").innerHTML = items.join("") || `<li class="hint" style="background:none;padding:0">אין חודשים סגורים.</li>`;
+  $("sWarnDay").value = warnDay(); $("sAutoDay").value = autoCloseDay();
 }
 $("sClosed").addEventListener("click", async (e) => {
-  const b = e.target.closest("[data-open-month]"); if (!b) return;
-  state.settings.closedMonths = state.settings.closedMonths.filter((m) => m !== b.dataset.openMonth);
-  await state.store.saveSettings({ closedMonths: state.settings.closedMonths });
-  renderClosed(); toast("החודש נפתח מחדש");
+  const o = e.target.closest("[data-open-month]"), c = e.target.closest("[data-close-month]");
+  if (!o && !c) return;
+  await setClosed(o ? o.dataset.openMonth : c.dataset.closeMonth, !o);
+  renderClosed(); toast(o ? "החודש נפתח מחדש" : "החודש נסגר");
 });
 $("sSave").onclick = async () => {
-  const patch = { businessName: $("sBizName").value.trim(), vatRate: Number($("sVat").value) || 18, geminiKey: $("sGeminiKey").value.trim(), geminiModel: $("sGeminiModel").value.trim() || "gemini-flash-latest" };
+  const wd = Math.round(Number($("sWarnDay").value)), ad = Math.round(Number($("sAutoDay").value));
+  if (!(wd >= 1 && wd <= 28 && ad >= 2 && ad <= 28 && wd < ad)) { toast("יום ההתראה צריך להיות לפני יום הסגירה האוטומטית (ימים 1 עד 28)", 4000); return; }
+  const patch = { businessName: $("sBizName").value.trim(), vatRate: Number($("sVat").value) || 18, geminiKey: $("sGeminiKey").value.trim(), geminiModel: $("sGeminiModel").value.trim() || "gemini-flash-latest", warnDay: wd, autoCloseDay: ad };
   try { await state.store.saveSettings(patch); Object.assign(state.settings, patch); $("bizName").textContent = patch.businessName; toast("ההגדרות נשמרו"); }
   catch (e) { console.error(e); toast("השמירה נכשלה", 4000); }
 };

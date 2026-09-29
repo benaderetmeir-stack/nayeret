@@ -24,6 +24,10 @@ export const DEFAULT_SETTINGS = {
   geminiModel: "gemini-flash-latest",
   closedMonths: [],
   customDocTypes: [],
+  reopenedMonths: [],
+  autoClosedThrough: "",
+  warnDay: 10,
+  autoCloseDay: 16,
   recentEmails: []
 };
 

@@ -69,6 +69,7 @@
           <button class="icon-btn" id="monthPrev" aria-label="חודש קודם">›</button>
         </div>
         <div class="month-actions">
+          <button class="close-warn" id="closeWarn" hidden></button>
           <span class="pill pill-closed" id="monthClosedPill" hidden>חודש סגור · נשלח לרו"ח</span>
           <button class="btn btn-ghost btn-sm" id="closeMonthBtn">סגור חודש</button>
         </div>
@@ -206,6 +207,11 @@
       <div class="panel">
         <h2 class="panel-title">חודשים סגורים</h2>
         <p class="panel-lead">מסמך שהתאריך שלו בחודש סגור נכנס אוטומטית לחודש הפתוח הנוכחי, עם סימון איחור.</p>
+        <div class="report-dates">
+          <label class="field"><span>התראה מיום בחודש</span><input type="number" id="sWarnDay" min="1" max="28" inputmode="numeric"></label>
+          <label class="field"><span>סגירה אוטומטית ביום</span><input type="number" id="sAutoDay" min="2" max="28" inputmode="numeric"></label>
+        </div>
+        <p class="hint">מיום ההתראה מופיעה התראה מהבהבת על החודש הקודם אם לא נסגר. ביום הסגירה האוטומטית הוא נסגר לבד. תמיד אפשר לפתוח מחדש.</p>
         <ul class="chips" id="sClosed"></ul>
       </div>
       <div class="row-actions">
