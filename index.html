@@ -96,6 +96,7 @@
         <span id="selectionCount">0 נבחרו</span>
         <div class="selection-actions">
           <button class="btn btn-primary btn-sm" id="selMakeFile">הפק קובץ מהנבחרים</button>
+          <button class="btn btn-sm sel-del" id="selDelete">מחק נבחרים</button>
           <button class="btn btn-ghost btn-sm" id="selClear">בטל בחירה</button>
         </div>
       </div>
@@ -173,6 +174,23 @@
           <span class="hint" id="usageSub"></span>
         </div>
         <p class="notice notice-warn" id="usageWarn" hidden></p>
+      </div>
+      <div class="panel" id="cleanupPanel">
+        <h2 class="panel-title">פינוי מקום</h2>
+        <p class="panel-lead">בוחרים תקופה ישנה. קודם יורד גיבוי מלא (טבלה + כל המסמכים + אקסל), ורק אחרי אישור המסמכים נמחקים מהמערכת.</p>
+        <div class="report-dates">
+          <label class="field"><span>מתיקיית חודש</span><input type="month" id="clFrom"></label>
+          <label class="field"><span>עד תיקיית חודש</span><input type="month" id="clTo"></label>
+        </div>
+        <div class="row-actions"><button class="btn btn-ghost" id="clCheck">בדיקה: כמה זה יפנה?</button></div>
+        <div id="clResult" hidden>
+          <p class="notice notice-info" id="clInfo"></p>
+          <ol class="steps">
+            <li><button class="btn btn-primary" id="clBackup">1. הורדת גיבוי</button> <span class="hint" id="clBackupState"></span></li>
+            <li><button class="btn btn-danger" id="clDelete" disabled>2. מחיקה מהמערכת</button> <span class="hint">אפשר רק אחרי שהגיבוי ירד</span></li>
+          </ol>
+          <p class="hint" id="clProgress" hidden></p>
+        </div>
       </div>
       <div class="panel">
         <h2 class="panel-title">פרטי העסק</h2>

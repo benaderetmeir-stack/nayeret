@@ -157,7 +157,7 @@ export class DemoStore {
   async findByInvoiceNumber(no) { return this.docs.filter((d) => d.invoiceNumber === no).map((d) => ({ ...d })); }
   async addDoc(meta, pages) {
     const id = "d" + (++this._n);
-    this.docs.push({ ...meta, id, pageCount: pages.length, createdAt: Date.now() + this._n });
+    this.docs.push({ ...meta, id, pageCount: pages.length, sizeBytes: docBytes(meta, pages), createdAt: Date.now() + this._n });
     this.pages[id] = pages.map((data, i) => ({ id: String(i).padStart(3, "0"), i, data }));
     return id;
   }

@@ -224,6 +224,23 @@ function renderSelection() {
   $("selectionCount").textContent = n === 1 ? "מסמך אחד נבחר" : `${n} מסמכים נבחרו`;
 }
 $("selClear").onclick = () => { state.selected.clear(); renderTable(); };
+$("selDelete").onclick = async () => {
+  const rows = state.rows.filter((r) => state.selected.has(r.id));
+  if (!rows.length) return;
+  if (!(await confirmBox(`למחוק ${rows.length === 1 ? "מסמך אחד" : `${rows.length} מסמכים`} לצמיתות, כולל התמונות?`, "מחק"))) return;
+  const done = await deleteMany(rows, (i, n) => toast(`מוחק ${i} מתוך ${n}…`, 1500));
+  state.selected.clear();
+  toast(done === rows.length ? `נמחקו ${done} מסמכים` : `נמחקו ${done} מתוך ${rows.length}. נסי שוב את השאר.`, 4000);
+  refreshUsage(); await loadRows();
+};
+async function deleteMany(rows, onProgress) {
+  let done = 0;
+  for (const r of rows) {
+    onProgress && onProgress(done + 1, rows.length);
+    try { await state.store.deleteDoc(r.id); done++; } catch (e) { console.error(e); }
+  }
+  return done;
+}
 $("selMakeFile").onclick = async () => {
   const rows = state.rows.filter((r) => state.selected.has(r.id));
   const kind = state.view;
@@ -749,9 +766,68 @@ async function refreshUsage() {
   banner.hidden = pct < 80;
   banner.textContent = pct >= 95 ? `האחסון כמעט מלא (${Math.round(pct)}%) · לפרטים` : `האחסון מתמלא (${Math.round(pct)}%) · לפרטים`;
 }
+// ===== פינוי מקום: גיבוי ואז מחיקה =====
+const cl = { rows: [], backedUp: false, key: "" };
+function clMonths() {
+  const a = $("clFrom").value, b = $("clTo").value;
+  if (!a || !b) { toast("בחרי חודש התחלה וחודש סיום"); return null; }
+  if (a > b) { toast("חודש ההתחלה אחרי חודש הסיום"); return null; }
+  const out = []; for (let m = a; m <= b && out.length < 120; m = shiftMonth(m, 1)) out.push(m);
+  return out;
+}
+function clReset() { cl.rows = []; cl.backedUp = false; $("clResult").hidden = true; $("clDelete").disabled = true; $("clBackupState").textContent = ""; }
+$("clFrom").addEventListener("change", clReset); $("clTo").addEventListener("change", clReset);
+$("clCheck").onclick = async () => {
+  const months = clMonths(); if (!months) return;
+  clReset();
+  const btn = $("clCheck"); btn.disabled = true; btn.textContent = "בודק…";
+  try { cl.rows = sortRows((await Promise.all(months.map((m) => state.store.listByMonth(m)))).flat()); }
+  finally { btn.disabled = false; btn.textContent = "בדיקה: כמה זה יפנה?"; }
+  cl.key = `${months[0]}_${months[months.length - 1]}`;
+  $("clResult").hidden = false;
+  if (!cl.rows.length) { $("clInfo").textContent = "אין מסמכים בתקופה הזו."; $("clBackup").disabled = true; return; }
+  $("clBackup").disabled = false;
+  const bytes = cl.rows.reduce((n, r) => n + (r.sizeBytes || (r.pageCount || 1) * 250 * 1024), 0);
+  const inv = cl.rows.filter((r) => r.kind === "invoice").length;
+  const size = bytes >= 1024 ** 2 ? Math.round(bytes / 1024 ** 2) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB";
+  $("clInfo").textContent = `תיקיות ${shortMonth(months[0])} עד ${shortMonth(months[months.length - 1])}: ${cl.rows.length} מסמכים (${inv} חשבוניות, ${cl.rows.length - inv} ניירת אחרת). המחיקה תפנה בערך \u2066${size}\u2069 (${Math.round(bytes / FREE_BYTES * 1000) / 10}% מהאחסון).`;
+};
+$("clBackup").onclick = async () => {
+  if (!cl.rows.length) return;
+  const btn = $("clBackup"); btn.disabled = true;
+  const bizName = state.settings.businessName || "";
+  const period = `גיבוי תיקיות ${cl.key.replace("_", " עד ")}`;
+  const files = [];
+  try {
+    const sections = ["invoice", "other"].map((kind) => ({ kind, rows: cl.rows.filter((r) => r.kind === kind) })).filter((x) => x.rows.length);
+    for (const { kind, rows } of sections) {
+      const label = KIND_LABEL[kind];
+      files.push({ name: safeName(`גיבוי ${label} ${cl.key}.pdf`), blob: await buildCombinedPdf(rows, kind, { title: label, subtitle: period, bizName }, (id) => state.store.getPages(id), (i, n) => (btn.textContent = `${label}: ${i} מתוך ${n}…`)) });
+    }
+    btn.textContent = "מכין אקסל…";
+    files.push({ name: safeName(`גיבוי ${cl.key}.xlsx`), blob: await buildExcel(sections, { subtitle: period, bizName }) });
+    for (const f of files) { downloadBlob(f.blob, f.name); await new Promise((r) => setTimeout(r, 500)); }
+    cl.backedUp = true;
+    $("clDelete").disabled = false;
+    $("clBackupState").textContent = `✓ ירדו ${files.length} קבצים לתיקיית ההורדות. לפני המחיקה, פתחי אותם ובדקי שהם תקינים.`;
+  } catch (e) {
+    console.error(e); toast("הגיבוי נכשל: " + (e.message || e), 5000);
+  } finally { btn.disabled = false; btn.textContent = "1. הורדת גיבוי"; }
+};
+$("clDelete").onclick = async () => {
+  if (!cl.backedUp || !cl.rows.length) return;
+  if (!(await confirmBox(`האם בדקת שקבצי הגיבוי ירדו ונפתחים?`, "כן, בדקתי", false))) return;
+  if (!(await confirmBox(`למחוק לצמיתות ${cl.rows.length} מסמכים מתיקיות ${cl.key.replace("_", " עד ")}? אי אפשר לשחזר אותם מהמערכת, רק מהגיבוי.`, "מחק לצמיתות"))) return;
+  const p = $("clProgress"); p.hidden = false; $("clDelete").disabled = true;
+  const done = await deleteMany(cl.rows, (i, n) => (p.textContent = `מוחק ${i} מתוך ${n}…`));
+  p.textContent = done === cl.rows.length ? `נמחקו ${done} מסמכים. המקום התפנה.` : `נמחקו ${done} מתוך ${cl.rows.length}. אפשר ללחוץ שוב "בדיקה" ולהמשיך.`;
+  cl.rows = []; cl.backedUp = false;
+  refreshUsage();
+};
 $("usageBanner").onclick = () => setView("settings");
 
 function fillSettings() {
+  if (!$("clFrom").value) { const y = Number(state.month.slice(0, 4)) - 2; $("clFrom").value = `${y}-01`; $("clTo").value = `${y}-12`; }
   const s = state.settings;
   $("sBizName").value = s.businessName || ""; $("sVat").value = s.vatRate ?? 18;
   $("sGeminiKey").value = s.geminiKey || ""; $("sGeminiModel").value = s.geminiModel || "";
