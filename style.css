@@ -395,7 +395,10 @@ button, input, select { font: inherit; color: inherit; }
 .chips li.chip-open { background: var(--warn-bg); color: var(--warn); }
 
 /* ===== ממתינים לאישור ===== */
-.inbox-banner { display: block; width: 100%; border: 0; background: var(--turq); color: #fff; text-align: center; font-weight: 700; font-size: 14px; padding: 8px 16px; cursor: pointer; }
+.inbox-banner { display: block; width: 100%; border: 0; background: #E2461C; color: #fff; text-align: center; font-weight: 800; font-size: 16px; padding: 11px 16px; cursor: pointer; letter-spacing: .2px; animation: inboxGlow 1.8s ease-in-out infinite; }
+.inbox-banner:hover { background: #C93A12; }
+@keyframes inboxGlow { 0%, 100% { background: #E2461C; } 50% { background: #F2672E; } }
+@media (prefers-reduced-motion: reduce) { .inbox-banner { animation: none; } }
 .inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .inbox-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .inbox-list img { width: 52px; height: 68px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
