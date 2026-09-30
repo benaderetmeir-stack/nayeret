@@ -1,6 +1,6 @@
 // ניירת INBAR — לוגיקת האפליקציה
 import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
-import { fileToPages, makeThumb, isPdf } from "./images.js";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js";
 import { recognize } from "./ocr.js";
 import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso } from "./reports.js";
 
@@ -119,6 +119,8 @@ async function enterApp() {
   await autoCloseMonths();
   setView(location.hash.replace("#", "") || "invoice");
   refreshUsage();
+  refreshInbox();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshInbox(); });
 }
 
 /* ======================= ניווט ======================= */
@@ -400,11 +402,12 @@ function printImages(urls) {
 }
 
 /* ======================= העלאה ואישור ======================= */
-const up = { pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
+const up = { inboxIds: null, inboxQueue: [], pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
 
 $("fab").onclick = () => openUpload();
 function showStep(id) { ["upCollect", "upMulti", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
 function openUpload(opts = {}) {
+  up.inboxIds = opts.inboxIds || null; if (!opts.inboxIds) up.inboxQueue = [];
   up.pages = opts.pages ? opts.pages.slice() : []; up.queue = []; up.edit = opts.edit || null; up.dupFound = null;
   $("upTitle").textContent = up.edit ? "עריכת פרטי מסמך" : "מסמך חדש";
   if (up.edit) { showStep("upReview"); fillReview(up.edit, null); }
@@ -611,6 +614,7 @@ function checkDup() {
 }
 
 $("rvCancel").onclick = async () => {
+  up.inboxQueue = [];
   if (up.queue.length && !(await confirmBox(`לבטל גם את ${up.queue.length} הקבצים שנשארו בתור?`, "בטל הכול"))) { return nextInQueue(); }
   $("uploadDlg").close();
 };
@@ -657,7 +661,9 @@ $("upReview").addEventListener("submit", async (e) => {
     }
     state.month = month;
     if (state.view !== kind && !up.queue.length) setView(kind); else loadRows();
+    if (up.inboxIds) { await state.store.deleteInbox(up.inboxIds).catch((e) => console.warn(e)); up.inboxIds = null; refreshInbox(); }
     if (up.queue.length) return nextInQueue();
+    if (up.inboxQueue.length) return processInboxGroup(up.inboxQueue.shift());
     $("uploadDlg").close();
   } catch (err) {
     console.error(err);
@@ -671,6 +677,67 @@ function nextInQueue() {
   $("upTitle").textContent = `מסמך חדש (נשארו ${up.queue.length + 1})`;
   showStep("upCollect");
   addFiles([f], true);
+}
+
+/* ======================= ממתינים לאישור (מהאייפון) ======================= */
+let inboxGroups = [];
+async function refreshInbox() {
+  let items = [];
+  try { items = await state.store.listInbox(); } catch (e) { console.warn("inbox", e); }
+  const map = new Map();
+  for (const it of items) {
+    const g = it.group || it.id;
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(it);
+  }
+  inboxGroups = [...map.entries()].map(([group, arr]) => ({ group, items: arr.sort((a, b) => (Number(a.i) || 0) - (Number(b.i) || 0)) }))
+    .sort((a, b) => String(a.group).localeCompare(String(b.group)));
+  const n = inboxGroups.length, b = $("inboxBanner");
+  b.hidden = !n;
+  b.textContent = n === 1 ? "📥 מסמך אחד ממתין לאישור · לטיפול" : `📥 ${n} מסמכים ממתינים לאישור · לטיפול`;
+  if ($("inboxDlg").open) renderInbox();
+}
+function groupLabel(g) {
+  const m = String(g).match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  return m ? `נשלח ${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : "נשלח מהאייפון";
+}
+function renderInbox() {
+  $("inboxAll").hidden = inboxGroups.length < 2;
+  $("inboxList").innerHTML = inboxGroups.length ? inboxGroups.map((g, i) => `<li>
+      <img src="${g.items[0]?.data || ""}" alt="">
+      <div><b>${esc(groupLabel(g.group))}</b><div class="hint">${g.items.length > 1 ? `${g.items.length} דפים` : "דף אחד"}</div></div>
+      <div class="ib-actions"><button class="btn btn-primary btn-sm" data-ib-open="${i}">טיפול</button><button class="btn btn-danger btn-sm" data-ib-del="${i}">מחיקה</button></div>
+    </li>`).join("") : `<li class="hint" style="display:block">אין מסמכים ממתינים.</li>`;
+}
+$("inboxBanner").onclick = () => { renderInbox(); $("inboxDlg").showModal(); };
+$("inboxList").addEventListener("click", async (e) => {
+  const o = e.target.closest("[data-ib-open]"), d = e.target.closest("[data-ib-del]");
+  if (o) { $("inboxDlg").close(); up.inboxQueue = []; processInboxGroup(inboxGroups[Number(o.dataset.ibOpen)]); }
+  if (d) {
+    const g = inboxGroups[Number(d.dataset.ibDel)];
+    if (!(await confirmBox("למחוק את המסמך הזה מהרשימה, בלי לשמור אותו?", "מחק"))) return;
+    await state.store.deleteInbox(g.items.map((x) => x.id)); refreshInbox();
+  }
+});
+$("inboxAll").onclick = () => {
+  const [first, ...rest] = inboxGroups; if (!first) return;
+  $("inboxDlg").close(); up.inboxQueue = rest; processInboxGroup(first);
+};
+async function processInboxGroup(g) {
+  if (!g) return;
+  const queue = up.inboxQueue;
+  openUpload({ inboxIds: g.items.map((x) => x.id) });
+  up.inboxQueue = queue;
+  $("upTitle").textContent = up.inboxQueue.length ? `ממתין לאישור (נשארו ${up.inboxQueue.length + 1})` : "ממתין לאישור";
+  $("upStart").hidden = true; $("upBusy").hidden = false; $("upBusyText").textContent = "מכין את המסמך…";
+  // דחיסה אחידה כמו בהעלאה רגילה
+  up.pages = [];
+  for (const it of g.items) {
+    try { const im = await loadImage(it.data); up.pages.push(compressCanvasSource(im, im.naturalWidth, im.naturalHeight)); }
+    catch (e) { console.warn(e); }
+  }
+  if (!up.pages.length) { toast("לא הצלחתי לקרוא את המסמך", 4000); $("uploadDlg").close(); return; }
+  runRecognition();
 }
 
 /* ======================= דוחות ======================= */

@@ -139,6 +139,13 @@ export class FirebaseStore {
     return { bytes, docs: all.size };
   }
 
+  // תיבת "ממתינים לאישור": מסמכים שנשלחו מהאייפון (קיצור "שלח לניירת")
+  async listInbox() {
+    const snap = await this.F.getDocs(this._col("inbox"));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+  async deleteInbox(ids) { await Promise.all(ids.map((id) => this.F.deleteDoc(this._doc("inbox", id)))); }
+
   async addReport(entry) { await this.F.addDoc(this._col("reports"), { ...entry, createdAt: Date.now() }); }
   async listReports() {
     const { query, orderBy, limit, getDocs } = this.F;
@@ -173,6 +180,8 @@ export class DemoStore {
     const bytes = this.docs.reduce((n, d) => n + docBytes(d, (this.pages[d.id] || []).map((p) => p.data)), 0);
     return { bytes, docs: this.docs.length };
   }
+  async listInbox() { return (this.inbox || []).slice(); }
+  async deleteInbox(ids) { this.inbox = (this.inbox || []).filter((x) => !ids.includes(x.id)); }
   async addReport(entry) { this.reports.unshift({ ...entry, id: "r" + Date.now(), createdAt: Date.now() }); }
   async listReports() { return this.reports.slice(0, 30); }
 }

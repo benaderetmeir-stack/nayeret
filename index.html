@@ -53,6 +53,7 @@
     </div>
     <div class="demo-banner" id="demoBanner" hidden>מצב תצוגה: הנתונים כאן לדוגמה בלבד ולא נשמרים</div>
     <button class="usage-banner" id="usageBanner" hidden></button>
+    <button class="inbox-banner" id="inboxBanner" hidden></button>
   </header>
 
   <main class="main">
@@ -343,6 +344,19 @@
   </div>
   <div class="vw-meta" id="vwMeta"></div>
   <div class="vw-body" id="vwBody"></div>
+</dialog>
+
+<!-- ===== ממתינים לאישור ===== -->
+<dialog id="inboxDlg" class="dlg">
+  <div class="dlg-head">
+    <h2>ממתינים לאישור</h2>
+    <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+  </div>
+  <div class="up-step">
+    <p class="hint" style="margin-bottom:12px">מסמכים שנשלחו מהאייפון ("שלח לניירת"). כל מסמך עובר זיהוי ואישור, ואז נכנס לתיקיית החודש שלו.</p>
+    <div class="row-actions" style="margin-bottom:12px"><button class="btn btn-primary" id="inboxAll">טיפול בכולם לפי הסדר</button></div>
+    <ul class="inbox-list" id="inboxList"></ul>
+  </div>
 </dialog>
 
 <!-- ===== בחירת חודש ===== -->

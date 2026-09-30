@@ -57,6 +57,12 @@ export async function seedDemo(store) {
     meta.thumb = await makeThumb(img);
     await store.addDoc(meta, [img]);
   }
+  // שני מסמכים שממתינים באיבוקס (כאילו נשלחו מהאייפון)
+  const g = `${cur.replace("-", "")}${String(now.getDate()).padStart(2, "0")}093000`;
+  store.inbox = [
+    { id: "in1", group: g, i: 1, total: 1, data: receipt({ title: "קפה גרג", sub: "רח' הדוגמה 3, ראשון לציון", lines: [["ישיבת צוות - קפה ומאפה", "180.00"]], total: 212.4, vat: 32.4, no: "7741", date: day(cur, 20), kind: "invoice" }) },
+    { id: "in2", group: g.replace(/093000$/, "101500"), i: 1, total: 1, data: receipt({ title: "תלוש שכר", sub: "עובדת ב'", lines: [["שכר ברוטו", "8,200.00"]], total: 6950, vat: null, no: "", date: day(cur, 1), kind: "other" }) }
+  ];
   await store.saveSettings({ closedMonths: [prev], recentEmails: ["office@example-cpa.co.il"] });
   await store.addReport({ kind: "invoice", by: "month", month: prev, from: "", to: "", count: 4, outputs: ["table", "docs", "excel"] });
 }
