@@ -686,7 +686,10 @@ async function refreshInbox() {
   try { items = await state.store.listInbox(); } catch (e) { console.warn("inbox", e); }
   const map = new Map();
   for (const it of items) {
-    const g = it.group || it.id;
+    // הקיצור באייפון שומר את הזמן ומספר העמוד בשם המסמך: <group>_<i>
+    const [idG, idI] = String(it.id).split("_");
+    if (it.i == null && idI) it.i = Number(idI);
+    const g = it.group || (idI ? idG : it.id);
     if (!map.has(g)) map.set(g, []);
     map.get(g).push(it);
   }
