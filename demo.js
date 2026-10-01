@@ -34,14 +34,14 @@ export async function seedDemo(store) {
   const inv = (supplier, no, date, total, opts = {}) => {
     const exempt = !!opts.exempt;
     const vat = exempt ? 0 : Math.round(total / 1.18 * 0.18 * 100) / 100;
-    return { kind: "invoice", supplier, invoiceNumber: no, date, total, vat, net: Math.round((total - vat) * 100) / 100, exempt, docType: "חשבונית מס קבלה", note: opts.note || "", month: opts.month || date.slice(0, 7), origMonth: date.slice(0, 7), late: !!opts.late, lines: opts.lines };
+    return { kind: "invoice", category: opts.cat || "", supplier, invoiceNumber: no, date, total, vat, net: Math.round((total - vat) * 100) / 100, exempt, docType: "חשבונית מס קבלה", note: opts.note || "", month: opts.month || date.slice(0, 7), origMonth: date.slice(0, 7), late: !!opts.late, lines: opts.lines };
   };
   const items = [
-    inv("מאור ציוד אסתטי בע\"מ", "20931", day(cur, 3), 2360, { lines: [["סרום היאלורוני x12", "1,440.00"], ["מסכות אלגינט x20", "560.00"]] }),
-    inv("פרחי הדר", "1187", day(cur, 5), 180, { exempt: true, lines: [["זר לקבלה", "180.00"]] }),
-    inv("מעבדות גל-טק", "88412", day(cur, 9), 4130, { lines: [["ראש טיפול RF", "3,500.00"]] }),
-    inv("דפוס אלון", "5520", day(cur, 12), 590, { lines: [["כרטיסי ביקור 500", "500.00"]] }),
-    inv("ניקיון ברק שירותים", "3310", day(cur, 15), 1180, { lines: [["ניקיון חודשי", "1,000.00"]] }),
+    inv("מאור ציוד אסתטי בע\"מ", "20931", day(cur, 3), 2360, { cat: "חומרים ותכשירים", lines: [["סרום היאלורוני x12", "1,440.00"], ["מסכות אלגינט x20", "560.00"]] }),
+    inv("פרחי הדר", "1187", day(cur, 5), 180, { cat: "כיבוד ומשרד", exempt: true, lines: [["זר לקבלה", "180.00"]] }),
+    inv("מעבדות גל-טק", "88412", day(cur, 9), 4130, { cat: "ציוד ומכשירים", lines: [["ראש טיפול RF", "3,500.00"]] }),
+    inv("דפוס אלון", "5520", day(cur, 12), 590, { cat: "שיווק ופרסום", lines: [["כרטיסי ביקור 500", "500.00"]] }),
+    inv("ניקיון ברק שירותים", "3310", day(cur, 15), 1180, { cat: "שכירות ואחזקה", lines: [["ניקיון חודשי", "1,000.00"]] }),
     inv("מאור ציוד אסתטי בע\"מ", "20877", day(prev, 27), 944, { month: cur, late: true, note: "", lines: [["כפפות ניטריל x10", "800.00"]] }),
     inv("מעבדות גל-טק", "88207", day(prev, 4), 1770, { lines: [["תחזוקת מכשיר", "1,500.00"]] }),
     inv("דפוס אלון", "5461", day(prev, 11), 354, { lines: [["עלונים", "300.00"]] }),

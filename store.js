@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   warnDay: 10,
   autoCloseDay: 16,
   recurIgnore: [],
+  customCats: [],
   recentEmails: []
 };
 
@@ -152,13 +153,16 @@ export class FirebaseStore {
       if (!k || !m) return;
       (s[k] ||= { name: x.supplier, m: [] });
       if (!s[k].m.includes(m)) s[k].m.push(m);
+      if (x.category) s[k].cat = x.category;
     });
     await this.F.setDoc(ref, { v: 1, s });
     return s;
   }
-  async addSupplierMonth(key, name, month) {
+  async addSupplierMonth(key, name, month, cat) {
     if (!key || !month) return;
-    await this.F.setDoc(this._doc("settings", "suppliers"), { v: 1, s: { [key]: { name, m: this.F.arrayUnion(month) } } }, { merge: true });
+    const entry = { name, m: this.F.arrayUnion(month) };
+    if (cat) entry.cat = cat;
+    await this.F.setDoc(this._doc("settings", "suppliers"), { v: 1, s: { [key]: entry } }, { merge: true });
   }
 
   // תיבת "ממתינים לאישור": מסמכים שנשלחו מהאייפון (קיצור "שלח לניירת")
@@ -209,10 +213,12 @@ export class DemoStore {
       if (!k || !m) return;
       (s[k] ||= { name: x.supplier, m: [] });
       if (!s[k].m.includes(m)) s[k].m.push(m);
+      if (x.category) s[k].cat = x.category;
     });
+    for (const [k, c] of Object.entries(this._cats || {})) if (s[k]) s[k].cat = c;
     return s;
   }
-  async addSupplierMonth() {}
+  async addSupplierMonth(key, name, month, cat) { if (cat) (this._cats ||= {})[key] = cat; }
   async listInbox() { return (this.inbox || []).slice(); }
   async deleteInbox(ids) { this.inbox = (this.inbox || []).filter((x) => !ids.includes(x.id)); }
   async addReport(entry) { this.reports.unshift({ ...entry, id: "r" + Date.now(), createdAt: Date.now() }); }

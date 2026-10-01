@@ -26,6 +26,64 @@ export const COLS = {
 
 export const KIND_LABEL = { invoice: "חשבוניות וקבלות", other: "ניירת אחרת" };
 
+// ===== קטגוריות הוצאה =====
+export const CATEGORIES = ["חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר"];
+// מהניירת האחרת נספרים רק תשלומים בפועל (תלושים, תעודות משלוח, דפי בנק וכו' לא נספרים)
+export const OTHER_CAT = { "העברת משכורת": "משכורות", "דוח קופות גמל / פנסיה": "משכורות", "ביטוח לאומי": "משכורות", "ביטוח": "ביטוח" };
+export const UNCAT = "לא מסווג";
+export function categorySummary(sections, catOf) {
+  const map = new Map();
+  for (const { kind, rows } of sections) for (const r of rows) {
+    let cat, amt;
+    if (kind === "invoice") { cat = r.category || catOf(r) || UNCAT; amt = Number(r.total) || 0; }
+    else { cat = OTHER_CAT[r.docType]; amt = Number(r.amount) || 0; if (!cat || !amt) continue; }
+    const x = map.get(cat) || { cat, total: 0, count: 0 };
+    x.total = Math.round((x.total + amt) * 100) / 100; x.count++; map.set(cat, x);
+  }
+  const list = [...map.values()].sort((a, b) => b.total - a.total);
+  return { list, total: Math.round(list.reduce((n, x) => n + x.total, 0) * 100) / 100 };
+}
+
+const CAT_COLORS = ["0FA3B1", "0E6A8C", "3BB273", "E1A33B", "E2461C", "7A5AE0", "2C8FD6", "C2549A", "6B8E23", "8A6D3B", "4A6B7C", "9AA9B2"];
+async function renderSummaryPage(pdf, summary, meta) {
+  if (!summary?.list?.length) return;
+  await document.fonts?.ready;
+  const W = TW, H = TH_, S = 2, M = 34;
+  const c = document.createElement("canvas"); c.width = W * S; c.height = H * S;
+  const ctx = c.getContext("2d"); ctx.scale(S, S); ctx.direction = "rtl";
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(W, 0, 0, 0); g.addColorStop(0, TURQ); g.addColorStop(1, BLUE);
+  ctx.fillStyle = g; roundRect(ctx, M, M, W - 2 * M, 58, 12); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  ctx.font = `700 22px ${FONT}`; ctx.fillText("סיכום הוצאות לפי קטגוריות", W - M - 18, M + 22);
+  ctx.font = `500 13px ${FONT}`; ctx.fillText(meta.subtitle, W - M - 18, M + 44);
+  ctx.textAlign = "left"; ctx.font = `600 14px ${FONT}`; ctx.fillText(meta.bizName, M + 18, M + 22);
+  const rows = summary.list.slice(0, 14), max = Math.max(...rows.map((r) => r.total), 1);
+  const RH = Math.min(38, (H - M - 120 - 70) / (rows.length + 1));
+  const nameX = W - M - 10, barRight = W - M - 250, barMaxW = barRight - (M + 230);
+  let y = M + 96;
+  rows.forEach((r, i) => {
+    if (i % 2) { ctx.fillStyle = "#F6FBFD"; ctx.fillRect(M, y, W - 2 * M, RH); }
+    ctx.textBaseline = "middle"; ctx.textAlign = "right"; ctx.fillStyle = INK; ctx.font = `600 15px ${FONT}`;
+    ctx.fillText(fitText(ctx, r.cat, 230), nameX, y + RH / 2);
+    const bw = Math.max(3, barMaxW * r.total / max);
+    ctx.fillStyle = "#" + CAT_COLORS[i % CAT_COLORS.length]; roundRect(ctx, barRight - bw, y + RH * 0.25, bw, RH * 0.5, 4); ctx.fill();
+    ctx.textAlign = "left"; ctx.fillStyle = BLUE; ctx.font = `700 15px ${FONT}`;
+    ctx.fillText("₪" + fmtMoney(r.total), M + 10, y + RH / 2);
+    ctx.fillStyle = INK2; ctx.font = `400 12px ${FONT}`;
+    ctx.fillText(`${r.count === 1 ? "מסמך אחד" : r.count + " מסמכים"} · ${Math.round(r.total / summary.total * 100)}%`, M + 120, y + RH / 2);
+    y += RH;
+  });
+  ctx.fillStyle = TURQ; ctx.fillRect(M, y, W - 2 * M, 2);
+  ctx.fillStyle = "#E4F4FA"; ctx.fillRect(M, y + 2, W - 2 * M, 40);
+  ctx.textAlign = "right"; ctx.fillStyle = INK; ctx.font = `700 16px ${FONT}`; ctx.fillText('סה"כ הוצאות', nameX, y + 22);
+  ctx.textAlign = "left"; ctx.fillStyle = BLUE; ctx.fillText("₪" + fmtMoney(summary.total), M + 10, y + 22);
+  ctx.fillStyle = INK2; ctx.font = `400 11px ${FONT}`; ctx.textAlign = "right";
+  ctx.fillText("כולל חשבוניות וקבלות, וכן תשלומים מהניירת האחרת (העברות משכורת, קופות גמל, ביטוח לאומי, ביטוח). תלושים, תעודות משלוח ודפי בנק לא נספרים.", W - M, H - M + 6);
+  pdf.addPage([W, H], "landscape");
+  pdf.addImage(c.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, W, H, undefined, "FAST");
+}
+
 export const fmtMoney = (n) => n == null || n === "" ? "" : Number(n).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 export const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -69,6 +127,7 @@ export async function buildTablePdf(rows, kind, meta) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [TW, TH_], compress: true });
   await renderTablePages(pdf, rows, kind, meta, {});
+  await renderSummaryPage(pdf, meta.summary, meta);
   return pdf.output("blob");
 }
 
@@ -241,6 +300,7 @@ export async function buildCombinedPdf(rows, kind, meta, getPages, onProgress) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [TW, TH_], compress: true });
   const { rowRects } = await renderTablePages(pdf, rows, kind, meta, { linked: true });
+  await renderSummaryPage(pdf, meta.summary, meta);
   const back = backButtonImage();
   const M = 30, TOP = 60;
   const firstPageOf = [];
@@ -285,8 +345,31 @@ export async function buildExcel(sections, meta) {
   const wb = new ExcelJS.Workbook();
   wb.creator = meta.bizName;
   for (const sec of sections) addSheet(wb, sec.rows, sec.kind, { ...meta, title: KIND_LABEL[sec.kind] });
+  if (meta.summary?.list?.length) addSummarySheet(wb, meta.summary, meta);
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function addSummarySheet(wb, summary, meta) {
+  const ws = wb.addWorksheet("סיכום קטגוריות", { views: [{ rightToLeft: true }] });
+  ws.mergeCells(1, 1, 1, 4);
+  const t = ws.getCell(1, 1); t.value = "סיכום הוצאות לפי קטגוריות";
+  t.font = { name: "Arial", size: 16, bold: true, color: { argb: "FFFFFFFF" } };
+  t.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0FA3B1" } }; ws.getRow(1).height = 30;
+  ws.mergeCells(2, 1, 2, 4); ws.getCell(2, 1).value = `${meta.bizName} · ${meta.subtitle}`;
+  ws.getCell(2, 1).font = { name: "Arial", color: { argb: "FF4A6B7C" } };
+  const head = ["קטגוריה", "מסמכים", "סכום", "אחוז"];
+  head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = { name: "Arial", bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCDEBF5" } }; });
+  summary.list.forEach((r, i) => {
+    const row = ws.getRow(4 + i);
+    row.getCell(1).value = r.cat; row.getCell(2).value = r.count;
+    row.getCell(3).value = r.total; row.getCell(3).numFmt = '#,##0.00 "₪"';
+    row.getCell(4).value = { formula: `C${4 + i}/C${4 + summary.list.length}`, result: r.total / summary.total }; row.getCell(4).numFmt = "0%";
+  });
+  const tr = ws.getRow(4 + summary.list.length);
+  tr.getCell(1).value = 'סה"כ'; tr.getCell(3).value = { formula: `SUM(C4:C${3 + summary.list.length})`, result: summary.total }; tr.getCell(3).numFmt = '#,##0.00 "₪"';
+  [1, 2, 3, 4].forEach((i) => { tr.getCell(i).font = { name: "Arial", bold: true, color: { argb: "FF0E6A8C" } }; tr.getCell(i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4F4FA" } }; });
+  ws.getColumn(1).width = 26; ws.getColumn(2).width = 10; ws.getColumn(3).width = 16; ws.getColumn(4).width = 10;
 }
 
 function addSheet(wb, rows, kind, meta) {

@@ -4,7 +4,7 @@ import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "
 import { recognize } from "./ocr.js";
 import { getRate, curSign } from "./fx.js";
 import { supplierKey, missingRecurring, recurringList } from "./recur.js";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig } from "./reports.js";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -47,8 +47,8 @@ function noteSupplier(meta) {
   if (meta.kind !== "invoice" || !meta.supplier || !meta.date) return;
   const k = supplierKey(meta.supplier), m = meta.date.slice(0, 7);
   if (!k) return;
-  if (state.recur) { (state.recur[k] ||= { name: meta.supplier, m: [] }); if (!state.recur[k].m.includes(m)) state.recur[k].m.push(m); }
-  state.store.addSupplierMonth(k, meta.supplier, m).catch((e) => console.warn(e));
+  if (state.recur) { (state.recur[k] ||= { name: meta.supplier, m: [] }); if (!state.recur[k].m.includes(m)) state.recur[k].m.push(m); if (meta.category) state.recur[k].cat = meta.category; }
+  state.store.addSupplierMonth(k, meta.supplier, m, meta.category || "").catch((e) => console.warn(e));
 }
 async function setIgnore(keys, on) {
   const list = (state.settings.recurIgnore || []).filter((x) => !keys.includes(x.split("|")[0]));
@@ -601,6 +601,9 @@ function fillReview(d, rec) {
   setDocType(d.docType && d.kind === "other" ? d.docType : "");
   $("rvName").value = d.name || ""; $("rvAmount").value = d.amount ?? "";
   $("rvNote").value = d.note || "";
+  catTouched = false;
+  // עריכה: מה שנשמר. חדש: מה שנלמד על הספק קודם, ורק אחר כך הניחוש של הזיהוי
+  setCat(up.edit ? (d.category || catMemory(d.supplier)) : (catMemory(d.supplier) || d.category || (d.kind !== "other" && rec?.ok ? (rec.result.category || "") : "")));
   applyExempt();
   fx.on = false; $("rvFx").hidden = true; $("rvFxLinkRow").hidden = false;
   if (d.currency && d.currency !== "ILS") {
@@ -620,6 +623,26 @@ function renderReviewImg() {
 }
 $("rvImgNav").addEventListener("click", (e) => { const b = e.target.closest("[data-pi]"); if (b) { up.pageIdx = Number(b.dataset.pi); renderReviewImg(); } });
 $("rvImg").addEventListener("click", () => $("rvImg").classList.toggle("zoomed"));
+
+// ===== קטגוריית הוצאה (רק לחשבוניות): ממולאת לבד, נלמדת לפי ספק =====
+const CAT_OTHER = "__catother__";
+const catList = () => [...CATEGORIES.filter((c) => c !== "אחר"), ...(state.settings.customCats || []).filter((c) => !CATEGORIES.includes(c)), "אחר"];
+function catMemory(supplier) {
+  const k = supplierKey(supplier); if (!k || !state.recur) return "";
+  if (state.recur[k]?.cat) return state.recur[k].cat;
+  const hit = Object.entries(state.recur).find(([key, v]) => v.cat && (k.startsWith(key + " ") || key.startsWith(k + " ")));
+  return hit ? hit[1].cat : "";
+}
+let catTouched = false;
+function setCat(value) {
+  const v = (value || "").trim(), list = catList();
+  const extra = v && !list.includes(v) ? [v] : [];
+  $("rvCat").innerHTML = `<option value="">בחרי קטגוריה…</option>` + [...list, ...extra].map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") + `<option value="${CAT_OTHER}">קטגוריה חדשה (לכתוב בעצמי)…</option>`;
+  $("rvCat").value = v; $("rvCatOther").value = ""; $("rvCatOtherBox").hidden = true;
+}
+const currentCat = () => $("rvCat").value === CAT_OTHER ? $("rvCatOther").value.trim() : $("rvCat").value;
+$("rvCat").addEventListener("change", () => { catTouched = true; const o = $("rvCat").value === CAT_OTHER; $("rvCatOtherBox").hidden = !o; if (o) setTimeout(() => $("rvCatOther").focus(), 30); });
+$("rvSupplier").addEventListener("change", () => { if (!catTouched) { const m = catMemory($("rvSupplier").value); if (m) setCat(m); } });
 
 // ===== מטבע זר: הסכום מומר לשקלים לפי השער היציג ביום החשבונית =====
 const fx = { on: false, reqId: 0, date: "", source: "" };
@@ -743,8 +766,12 @@ $("upReview").addEventListener("submit", async (e) => {
     Object.assign(meta, {
       supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), exempt: $("rvExempt").checked,
       total: numVal($("rvTotal")), vat: $("rvExempt").checked ? 0 : numVal($("rvVat")), net: numVal($("rvNet")),
-      docType: "", name: "", amount: null
+      docType: "", name: "", amount: null, category: currentCat()
     });
+    if (meta.category && !catList().includes(meta.category)) {
+      state.settings.customCats = [...(state.settings.customCats || []), meta.category].slice(-20);
+      state.store.saveSettings({ customCats: state.settings.customCats }).catch(() => {});
+    }
     if (meta.net == null && meta.total != null && meta.vat != null) meta.net = r2(meta.total - meta.vat);
     if (!meta.supplier) return fieldError("rvSupplier", "חסר שם ספק");
     if (!date) return fieldError("rvDateI", "חסר תאריך");
@@ -937,10 +964,13 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
   const stamp = `הופק ${fmtDate(localIso(new Date())).replace(/\//g, "-")}`;
   const files = [];
   $("rResult").hidden = false; $("rResultInfo").textContent = "מפיק קבצים…"; $("rFiles").innerHTML = "";
+  const summary = categorySummary(sections, (r) => catMemory(r.supplier));
   try {
+    let first = true;
     for (const { kind, rows } of sections) {
       const label = KIND_LABEL[kind];
-      const meta = { title: label, subtitle: period, bizName };
+      const meta = { title: label, subtitle: period, bizName, summary: first ? summary : null };
+      first = false;
       const base = safeName(`${label} ${fileTag}`);
       if (outputs.combined) {
         files.push({ name: `${base} - טבלה ו${kind === "invoice" ? "חשבוניות" : "מסמכים"} (${stamp}).pdf`, label: `${label}: טבלה + כל המסמכים בקובץ אחד`, blob: await buildCombinedPdf(rows, kind, meta, (id) => state.store.getPages(id), (i, n) => { btn.textContent = `${label}: מסמך ${i} מתוך ${n}…`; $("rResultInfo").textContent = `${label}: מכין מסמך ${i} מתוך ${n}…`; }) });
@@ -953,7 +983,7 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
     if (outputs.excel) {
       btn.textContent = "מפיק אקסל…";
       const lbl = sections.map((s) => KIND_LABEL[s.kind]).join(" + ");
-      files.push({ name: safeName(`${sections.length > 1 ? "ניירת לרואה חשבון" : lbl} ${fileTag} (${stamp}).xlsx`), blob: await buildExcel(sections, { subtitle: period, bizName }), label: sections.length > 1 ? "אקסל עם גיליון לכל סוג" : "טבלה באקסל" });
+      files.push({ name: safeName(`${sections.length > 1 ? "ניירת לרואה חשבון" : lbl} ${fileTag} (${stamp}).xlsx`), blob: await buildExcel(sections, { subtitle: period, bizName, summary }), label: sections.length > 1 ? "אקסל עם גיליון לכל סוג וסיכום קטגוריות" : "טבלה באקסל + סיכום קטגוריות" });
     }
   } catch (e) {
     console.error(e); toast("ההפקה נכשלה: " + (e.message || e), 5000);
@@ -966,7 +996,8 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
     const total = s.kind === "invoice" ? sumOf(s.rows, "total") : sumOf(s.rows, "amount");
     return `${KIND_LABEL[s.kind]}: ${s.rows.length} מסמכים${total ? `, סה"כ ₪${fmtMoney(total)}` : ""}`;
   });
-  $("rResultInfo").textContent = `${period} · ${parts.join(" · ")}. המספור בכל קובץ מסמכים תואם לשורות בטבלה שלו. ${note}`.trim();
+  const top = summary.list.slice(0, 4).map((x) => `${x.cat} ₪${fmtMoney(x.total)}`).join(" · ");
+  $("rResultInfo").textContent = `${period} · ${parts.join(" · ")}.${top ? ` לפי קטגוריות: ${top}${summary.list.length > 4 ? " ועוד" : ""}.` : ""} המספור בכל קובץ מסמכים תואם לשורות בטבלה שלו. ${note}`.trim();
   $("rFiles").innerHTML = files.map((f, i) => `<li><div><div class="fname">${esc(f.name)}</div><div class="fsize">${f.label} · ${fmtSize(f.blob.size)}</div></div><button class="btn btn-ghost btn-sm" data-dl="${i}">הורדה</button></li>`).join("");
   $("rResult").scrollIntoView({ behavior: "smooth", block: "start" });
   return true;

@@ -17,6 +17,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "net": number | null,       // amount before VAT
   "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
   "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
+  "category": string,         // for invoices only, one of: "חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר". The business is a medical-cosmetics clinic.
   "note": string              // very short Hebrew note if something important is unclear, else ""
 }
 Rules:
@@ -63,6 +64,7 @@ export function normalizeResult(r) {
     exempt: !!r.exempt,
     amount: num(r.amount),
     currency: normCur(r.currency),
+    category: String(r.category || "").trim(),
     note: String(r.note || "").trim()
   };
   if (out.currency !== "ILS") { out.vat = 0; out.net = out.total; out.exempt = false; }
