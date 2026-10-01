@@ -11,7 +11,8 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
   "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable
-  "total": number | null,     // total including VAT
+  "currency": string,         // ISO code of the amounts as printed: "ILS" (₪, ש"ח, NIS), "USD" ($), "EUR" (€), "GBP" (£)...
+  "total": number | null,     // total including VAT, in the document's currency
   "vat": number | null,       // VAT amount
   "net": number | null,       // amount before VAT
   "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
@@ -31,6 +32,14 @@ function num(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^\d.\-]/g, ""));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+function normCur(c) {
+  const s = String(c || "").trim().toUpperCase();
+  if (!s || /ILS|NIS|₪|ש"?ח|שקל/.test(s)) return "ILS";
+  if (/USD|\$|US ?DOLLAR|דולר/.test(s)) return "USD";
+  if (/EUR|€|יורו/.test(s)) return "EUR";
+  if (/GBP|£/.test(s)) return "GBP";
+  return /^[A-Z]{3}$/.test(s) ? s : "ILS";
 }
 function isoDate(v) {
   if (!v) return "";
@@ -53,8 +62,10 @@ export function normalizeResult(r) {
     total: num(r.total), vat: num(r.vat), net: num(r.net),
     exempt: !!r.exempt,
     amount: num(r.amount),
+    currency: normCur(r.currency),
     note: String(r.note || "").trim()
   };
+  if (out.currency !== "ILS") { out.vat = 0; out.net = out.total; out.exempt = false; }
   if (out.exempt) { out.vat = 0; if (out.total != null) out.net = out.total; }
   if (out.total != null && out.vat != null && out.net == null) out.net = Math.round((out.total - out.vat) * 100) / 100;
   if (out.kind === "other" && !out.name) out.name = out.supplier;

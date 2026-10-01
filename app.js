@@ -2,7 +2,8 @@
 import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
 import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js";
 import { recognize } from "./ocr.js";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso } from "./reports.js";
+import { getRate, curSign } from "./fx.js";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote } from "./reports.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -232,7 +233,7 @@ function renderTable() {
     ${cols.map((c) => {
       if (c.key === "idx") return `<td class="col-idx">${i + 1}</td>`;
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
-      if (c.key === "note") return `<td class="note-cell">${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}</td>`;
+      if (c.key === "note") return `<td class="note-cell">${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
       return `<td class="${c.money ? "num" : ""}${c.strong ? " total-cell" : ""}">${esc(cellText(r, c.key))}</td>`;
     }).join("")}
@@ -538,6 +539,11 @@ function fillReview(d, rec) {
   $("rvName").value = d.name || ""; $("rvAmount").value = d.amount ?? "";
   $("rvNote").value = d.note || "";
   applyExempt();
+  fx.on = false; $("rvFx").hidden = true; $("rvFxLinkRow").hidden = false;
+  if (d.currency && d.currency !== "ILS") {
+    const orig = d.origAmount ?? (d.kind === "other" ? d.amount : d.total);
+    startFx(d.currency, orig, d.fxRate || null, d.fxDate);
+  }
   if (up.edit) { $("rvMonth").value = d.month; updateMonthHint(); }
   else syncDate();
   $("rvDup").hidden = true; up.dupFound = null;
@@ -551,6 +557,50 @@ function renderReviewImg() {
 }
 $("rvImgNav").addEventListener("click", (e) => { const b = e.target.closest("[data-pi]"); if (b) { up.pageIdx = Number(b.dataset.pi); renderReviewImg(); } });
 $("rvImg").addEventListener("click", () => $("rvImg").classList.toggle("zoomed"));
+
+// ===== מטבע זר: הסכום מומר לשקלים לפי השער היציג ביום החשבונית =====
+const fx = { on: false, reqId: 0, date: "", source: "" };
+const fxTarget = () => (curKind() === "invoice" ? $("rvTotal") : $("rvAmount"));
+function startFx(cur, orig, rate, rateDate) {
+  fx.on = true;
+  $("rvFx").hidden = false; $("rvFxLinkRow").hidden = true;
+  $("rvFxCur").value = ["USD", "EUR", "GBP"].includes(cur) ? cur : "USD";
+  $("rvFxOrig").value = orig ?? "";
+  $("rvFxTitle").textContent = `זוהה סכום ב${{ USD: "דולר", EUR: "יורו", GBP: "ליש\"ט" }[$("rvFxCur").value]}. הסכום הומר לשקלים`;
+  if (rate) { $("rvFxRate").value = rate; fx.date = rateDate || ""; fx.source = ""; applyFx(); }
+  else loadFxRate();
+}
+async function loadFxRate() {
+  const id = ++fx.reqId, cur = $("rvFxCur").value, date = dateEl().value;
+  $("rvFxHint").textContent = "מביא את השער היציג…";
+  const r = await getRate(cur, date);
+  if (id !== fx.reqId || !fx.on) return;
+  if (!r) { $("rvFxHint").textContent = "לא הצלחתי להביא שער אוטומטית. הקלידי את השער ידנית."; return; }
+  $("rvFxRate").value = r.rate; fx.date = r.date; fx.source = r.source;
+  applyFx();
+}
+function applyFx() {
+  if (!fx.on) return;
+  const orig = numVal($("rvFxOrig")), rate = numVal4($("rvFxRate")), cur = $("rvFxCur").value;
+  if (orig == null || !rate) { $("rvFxHint").textContent = "ממלאים סכום במקור ושער, והסכום בשקלים יחושב לבד."; return; }
+  const ils = r2(orig * rate);
+  fxTarget().value = ils;
+  if (curKind() === "invoice") { $("rvVat").value = 0; $("rvNet").value = ils; }
+  $("rvFxHint").textContent = `${curSign(cur)}${fmtMoney(orig)} × ${rate} = ₪${fmtMoney(ils)}${fx.source ? ` · שער יציג ${fx.source}${fx.date ? " ל-" + fmtDate(fx.date) : ""}` : ""}`;
+  checkDup();
+}
+const numVal4 = (el) => el.value === "" ? null : Math.round(parseFloat(el.value) * 10000) / 10000;
+$("rvFxOn").onclick = () => { const t = numVal(fxTarget()); startFx("USD", t, null); };
+$("rvFxOff").onclick = () => {
+  fx.on = false; fx.reqId++; $("rvFx").hidden = true; $("rvFxLinkRow").hidden = false;
+  const orig = $("rvFxOrig").value; fxTarget().value = orig;
+  if (curKind() === "invoice") { $("rvNet").value = orig; }
+};
+$("rvFxCur").addEventListener("change", () => { $("rvFxRate").value = ""; startFx($("rvFxCur").value, numVal($("rvFxOrig")), null); });
+$("rvFxOrig").addEventListener("input", applyFx);
+$("rvFxRate").addEventListener("input", () => { fx.source = ""; fx.date = ""; applyFx(); });
+$("rvDateI").addEventListener("change", () => { if (fx.on && fx.source) loadFxRate(); });
+$("rvDateO").addEventListener("change", () => { if (fx.on && fx.source) loadFxRate(); });
 
 // שיוך לחודש
 function syncDate() {
@@ -646,6 +696,11 @@ $("upReview").addEventListener("submit", async (e) => {
     }
     if (!date) return fieldError("rvDateO", "חסר תאריך");
   }
+  if (fx.on) {
+    const orig = numVal($("rvFxOrig")), rate = numVal4($("rvFxRate"));
+    if (orig == null || !rate) return fieldError(orig == null ? "rvFxOrig" : "rvFxRate", "חסר סכום במקור או שער");
+    Object.assign(meta, { currency: $("rvFxCur").value, origAmount: orig, fxRate: rate, fxDate: fx.date || date });
+  } else Object.assign(meta, { currency: "ILS", origAmount: null, fxRate: null, fxDate: "" });
   if (up.dupFound && !(await confirmBox("נראה שהחשבונית הזו כבר שמורה במערכת (אותו מספר ואותו סכום). לשמור בכל זאת?", "שמור בכל זאת", false))) return;
 
   const btn = $("rvSave"); btn.disabled = true; btn.textContent = "שומר…";

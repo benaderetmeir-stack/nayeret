@@ -31,11 +31,16 @@ export const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.spl
 export const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const sumOf = (rows, key) => Math.round(rows.reduce((s, r) => s + (Number(r[key]) || 0), 0) * 100) / 100;
 
+const SIGNS = { USD: "$", EUR: "€", GBP: "£" };
+export function fxNote(r) {
+  if (!r.currency || r.currency === "ILS" || r.origAmount == null) return "";
+  return `${SIGNS[r.currency] || r.currency}${fmtMoney(r.origAmount)} לפי שער ${r.fxRate}`;
+}
 export function cellText(row, key) {
   if (key === "date") return fmtDate(row.date);
   const col = [...COLS.invoice, ...COLS.other].find((c) => c.key === key);
   if (col?.money) return fmtMoney(row[key]);
-  if (key === "note") return [row.late ? `באיחור מ-${row.origMonth?.split("-").reverse().join("/")}` : "", row.note || ""].filter(Boolean).join(" · ");
+  if (key === "note") return [fxNote(row), row.late ? `באיחור מ-${row.origMonth?.split("-").reverse().join("/")}` : "", row.note || ""].filter(Boolean).join(" · ");
   return row[key] == null ? "" : String(row[key]);
 }
 

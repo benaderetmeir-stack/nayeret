@@ -403,3 +403,11 @@ button, input, select { font: inherit; color: inherit; }
 .inbox-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .inbox-list img { width: 52px; height: 68px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
 .inbox-list .ib-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ===== מטבע זר ===== */
+.fx-box { background: var(--sky); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fx-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--blue); }
+.fx-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.link-btn { border: 0; background: none; color: var(--blue); text-decoration: underline; cursor: pointer; font-size: 13px; padding: 2px 0; }
+.fx-link-row { margin-top: -6px; }
+.fx-pill { background: var(--sky-2); color: var(--blue); }
