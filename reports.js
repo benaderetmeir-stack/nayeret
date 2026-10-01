@@ -32,9 +32,12 @@ export const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pa
 export const sumOf = (rows, key) => Math.round(rows.reduce((s, r) => s + (Number(r[key]) || 0), 0) * 100) / 100;
 
 const SIGNS = { USD: "$", EUR: "€", GBP: "£" };
-export function fxNote(r) {
-  if (!r.currency || r.currency === "ILS" || r.origAmount == null) return "";
-  return `${SIGNS[r.currency] || r.currency}${fmtMoney(r.origAmount)} לפי שער ${r.fxRate}`;
+export const isFx = (r) => !!r.currency && r.currency !== "ILS" && r.origAmount != null;
+export function fxNote(r) { return isFx(r) ? `שער ${SIGNS[r.currency] || r.currency} ${r.fxRate}` : ""; }
+// הסכום המקורי בסוגריים, למשל ($25.00). רק בעמודת הסכום הכולל
+export function fxOrig(r, key) {
+  if (!isFx(r) || key !== (r.kind === "other" ? "amount" : "total")) return "";
+  return `(${SIGNS[r.currency] || r.currency}${fmtMoney(r.origAmount)})`;
 }
 export function cellText(row, key) {
   if (key === "date") return fmtDate(row.date);
@@ -129,10 +132,12 @@ async function renderTablePages(pdf, rows, kind, meta, { linked = false }) {
           return;
         }
         const t = col.key === "idx" ? String(ri + 1) : cellText(r, col.key);
+        const orig = fxOrig(r, col.key);
         ctx.fillStyle = col.key === "idx" || col.key === "note" ? INK2 : (col.strong ? BLUE : INK);
         ctx.font = `${col.strong ? 700 : col.key === "supplier" || col.key === "name" ? 600 : 400} ${col.key === "note" ? 12 : 14}px ${FONT}`;
         ctx.textAlign = col.money ? "left" : "right";
-        ctx.fillText(fitText(ctx, t, w - 18), col.money ? x + 10 : x + w - 10, y + RH / 2);
+        ctx.fillText(fitText(ctx, t, w - 18), col.money ? x + 10 : x + w - 10, y + RH / 2 - (orig ? 8 : 0));
+        if (orig) { ctx.fillStyle = INK2; ctx.font = `500 12px ${FONT}`; ctx.fillText(fitText(ctx, orig, w - 18), x + 10, y + RH / 2 + 11); }
       });
       ctx.fillStyle = LINE; ctx.fillRect(M, y + RH - 1, tableW, 1);
       y += RH;
@@ -316,7 +321,11 @@ function addSheet(wb, rows, kind, meta) {
     cols.forEach((c, i) => {
       const cell = row.getCell(i + 1);
       if (c.key === "idx") cell.value = ri + 1;
-      else if (c.money) { cell.value = r[c.key] == null ? null : Number(r[c.key]); cell.numFmt = '#,##0.00 "₪"'; }
+      else if (c.money) {
+        cell.value = r[c.key] == null ? null : Number(r[c.key]);
+        const orig = fxOrig(r, c.key);
+        cell.numFmt = orig ? `#,##0.00 "₪ ${orig}"` : '#,##0.00 "₪"';
+      }
       else if (c.key === "date") { if (r.date) { const [y, m, d] = r.date.split("-").map(Number); cell.value = new Date(Date.UTC(y, m - 1, d)); cell.numFmt = "dd/mm/yyyy"; } }
       else cell.value = cellText(r, c.key);
       cell.font = { name: "Arial", bold: !!c.strong, color: { argb: c.strong ? "FF0E6A8C" : "FF0B3448" } };

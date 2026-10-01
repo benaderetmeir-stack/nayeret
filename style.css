@@ -411,3 +411,4 @@ button, input, select { font: inherit; color: inherit; }
 .link-btn { border: 0; background: none; color: var(--blue); text-decoration: underline; cursor: pointer; font-size: 13px; padding: 2px 0; }
 .fx-link-row { margin-top: -6px; }
 .fx-pill { background: var(--sky-2); color: var(--blue); }
+.fx-orig { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); font-family: var(--font); }

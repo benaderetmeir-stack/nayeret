@@ -3,7 +3,7 @@ import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
 import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js";
 import { recognize } from "./ocr.js";
 import { getRate, curSign } from "./fx.js";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote } from "./reports.js";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig } from "./reports.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -235,7 +235,8 @@ function renderTable() {
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
       if (c.key === "note") return `<td class="note-cell">${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
-      return `<td class="${c.money ? "num" : ""}${c.strong ? " total-cell" : ""}">${esc(cellText(r, c.key))}</td>`;
+      const orig = fxOrig(r, c.key);
+      return `<td class="${c.money ? "num" : ""}${c.strong ? " total-cell" : ""}">${esc(cellText(r, c.key))}${orig ? `<small class="fx-orig">${esc(orig)}</small>` : ""}</td>`;
     }).join("")}
     <td><button class="row-btn" data-del aria-label="מחיקת שורה" title="מחיקה">🗑</button></td></tr>`).join("");
 
@@ -254,7 +255,7 @@ function renderTable() {
         <div class="card-title">${i + 1}. ${esc(kind === "invoice" ? r.supplier : `${r.docType || ""}${r.name ? " · " + r.name : ""}`)}</div>
         <div class="card-sub"><span>${fmtDate(r.date)}</span>${kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
       </div>
-      <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
+      <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${fxOrig(r, kind === "invoice" ? "total" : "amount") ? `<small class="fx-orig">${esc(fxOrig(r, kind === "invoice" ? "total" : "amount"))}</small>` : ""}${kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
         <label class="check" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" class="rowSel" ${state.selected.has(r.id) ? "checked" : ""} aria-label="בחירה"></label></div>
     </div>`).join("");
   renderSelection();
