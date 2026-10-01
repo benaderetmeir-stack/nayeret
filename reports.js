@@ -39,15 +39,14 @@ export function categorySummary(sections, catOf) {
     else { cat = OTHER_CAT[r.docType]; amt = Number(r.amount) || 0; if (!cat || !amt) continue; }
     const x = map.get(cat) || { cat, total: 0, count: 0, items: [] };
     x.total = Math.round((x.total + amt) * 100) / 100; x.count++; map.set(cat, x);
-    x.items.push({ date: r.date || "", name: kind === "invoice" ? (r.supplier || "") : (r.name || ""), ref: kind === "invoice" ? (r.invoiceNumber || "") : (r.docType || ""), amount: amt });
+    x.items.push({ date: r.date || "", name: kind === "invoice" ? (r.supplier || "") : (r.name || ""), ref: kind === "invoice" ? (r.invoiceNumber || "") : (r.docType || ""), amount: amt, src: r });
   }
   const list = [...map.values()].sort((a, b) => b.total - a.total);
   return { list, total: Math.round(list.reduce((n, x) => n + x.total, 0) * 100) / 100 };
 }
 
 const CAT_COLORS = ["0FA3B1", "0E6A8C", "3BB273", "E1A33B", "E2461C", "7A5AE0", "2C8FD6", "C2549A", "6B8E23", "8A6D3B", "4A6B7C", "9AA9B2"];
-async function renderSummaryPage(pdf, summary, meta) {
-  if (!summary?.list?.length) return;
+async function drawSummary(summary, meta) {
   await document.fonts?.ready;
   const W = TW, H = TH_, S = 2, M = 34;
   const c = document.createElement("canvas"); c.width = W * S; c.height = H * S;
@@ -81,6 +80,11 @@ async function renderSummaryPage(pdf, summary, meta) {
   ctx.textAlign = "left"; ctx.fillStyle = BLUE; ctx.fillText("₪" + fmtMoney(summary.total), M + 10, y + 22);
   ctx.fillStyle = INK2; ctx.font = `400 11px ${FONT}`; ctx.textAlign = "right";
   ctx.fillText("כולל חשבוניות וקבלות, וכן תשלומים מהניירת האחרת (העברות משכורת, קופות גמל, ביטוח לאומי, ביטוח). תלושים, תעודות משלוח ודפי בנק לא נספרים.", W - M, H - M + 6);
+  return { c, W, H, S, usedH: y + 42 + M };
+}
+async function renderSummaryPage(pdf, summary, meta) {
+  if (!summary?.list?.length) return;
+  const { c, W, H } = await drawSummary(summary, meta);
   pdf.addPage([W, H], "landscape");
   pdf.addImage(c.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, W, H, undefined, "FAST");
 }
@@ -345,13 +349,14 @@ export async function buildExcel(sections, meta) {
   const ExcelJS = window.ExcelJS;
   const wb = new ExcelJS.Workbook();
   wb.creator = meta.bizName;
-  for (const sec of sections) addSheet(wb, sec.rows, sec.kind, { ...meta, title: KIND_LABEL[sec.kind] });
-  if (meta.summary?.list?.length) addSummarySheet(wb, meta.summary, meta);
+  const refs = new Map();   // שורת מסמך → התא של הסכום שלה בגיליון הראשי
+  for (const sec of sections) addSheet(wb, sec.rows, sec.kind, { ...meta, title: KIND_LABEL[sec.kind], refs });
+  if (meta.summary?.list?.length) addSummarySheet(wb, meta.summary, meta, refs);
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
-function addSummarySheet(wb, summary, meta) {
+function addSummarySheet(wb, summary, meta, refs) {
   const ws = wb.addWorksheet("סיכום קטגוריות", { views: [{ rightToLeft: true }] });
   ws.mergeCells(1, 1, 1, 4);
   const t = ws.getCell(1, 1); t.value = "סיכום הוצאות לפי קטגוריות";
@@ -361,12 +366,6 @@ function addSummarySheet(wb, summary, meta) {
   ws.getCell(2, 1).font = { name: "Arial", color: { argb: "FF4A6B7C" } };
   const head = ["קטגוריה", "מסמכים", "סכום", "אחוז"];
   head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = { name: "Arial", bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCDEBF5" } }; });
-  summary.list.forEach((r, i) => {
-    const row = ws.getRow(4 + i);
-    row.getCell(1).value = r.cat; row.getCell(2).value = r.count;
-    row.getCell(3).value = r.total; row.getCell(3).numFmt = '#,##0.00 "₪"';
-    row.getCell(4).value = { formula: `C${4 + i}/C${4 + summary.list.length}`, result: r.total / summary.total }; row.getCell(4).numFmt = "0%";
-  });
   const tr = ws.getRow(4 + summary.list.length);
   tr.getCell(1).value = 'סה"כ'; tr.getCell(3).value = { formula: `SUM(C4:C${3 + summary.list.length})`, result: summary.total }; tr.getCell(3).numFmt = '#,##0.00 "₪"';
   [1, 2, 3, 4].forEach((i) => { tr.getCell(i).font = { name: "Arial", bold: true, color: { argb: "FF0E6A8C" } }; tr.getCell(i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4F4FA" } }; });
@@ -374,8 +373,9 @@ function addSummarySheet(wb, summary, meta) {
   // פס צבעוני בתוך תא הסכום, באורך יחסי לגודל הקטגוריה
   if (summary.list.length) ws.addConditionalFormatting({ ref: `C4:C${3 + summary.list.length}`, rules: [{ type: "dataBar", minLength: 0, maxLength: 100, gradient: false, color: { argb: "FF5CCFD8" }, cfvo: [{ type: "num", value: 0 }, { type: "max" }] }] });
 
-  // פירוט: כל המסמכים בכל קטגוריה, עם סיכום ביניים
   let y = 6 + summary.list.length;
+  const subRows = [];
+  // פירוט: כל המסמכים בכל קטגוריה, עם סיכום ביניים
   ws.mergeCells(y, 1, y, 4); const dt = ws.getCell(y, 1); dt.value = "פירוט לפי קטגוריות";
   dt.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
   dt.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0E6A8C" } }; ws.getRow(y).height = 24; y += 2;
@@ -392,7 +392,9 @@ function addSummarySheet(wb, summary, meta) {
       const row = ws.getRow(y);
       row.getCell(1).value = it.name;
       row.getCell(2).value = it.date ? fmtDate(it.date) : "";
-      row.getCell(3).value = it.amount; row.getCell(3).numFmt = '#,##0.00 "₪"';
+      // הסכום מקושר לגיליון הראשי: שינוי שם מעדכן כאן ובסיכום
+      const ref = refs?.get(it.src);
+      row.getCell(3).value = ref ? { formula: ref, result: it.amount } : it.amount; row.getCell(3).numFmt = '#,##0.00 "₪"';
       row.getCell(4).value = it.ref; row.getCell(4).alignment = { horizontal: "right" };
       [1, 2, 3, 4].forEach((i) => { row.getCell(i).font = { name: "Arial" }; row.getCell(i).border = { bottom: { style: "hair", color: { argb: "FFCDE3EA" } } }; });
       y++;
@@ -400,8 +402,16 @@ function addSummarySheet(wb, summary, meta) {
     const st = ws.getRow(y);
     st.getCell(1).value = `סה"כ ${r.cat}`;
     st.getCell(3).value = { formula: `SUM(C${first}:C${y - 1})`, result: r.total }; st.getCell(3).numFmt = '#,##0.00 "₪"';
+    subRows.push(y);
     [1, 2, 3, 4].forEach((i) => { st.getCell(i).font = { name: "Arial", bold: true, color: { argb: "FF0E6A8C" } }; st.getCell(i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4F4FA" } }; });
     y += 2;
+  });
+  // הסיכום למעלה מחושב מסיכומי הביניים של הפירוט
+  summary.list.forEach((r, i) => {
+    const row = ws.getRow(4 + i);
+    row.getCell(1).value = r.cat; row.getCell(2).value = r.count;
+    row.getCell(3).value = { formula: `C${subRows[i]}`, result: r.total }; row.getCell(3).numFmt = '#,##0.00 "₪"';
+    row.getCell(4).value = { formula: `C${4 + i}/C${4 + summary.list.length}`, result: r.total / summary.total }; row.getCell(4).numFmt = "0%";
   });
 }
 
@@ -439,6 +449,7 @@ function addSheet(wb, rows, kind, meta) {
       if (c.key === "idx") cell.value = ri + 1;
       else if (c.money) {
         cell.value = r[c.key] == null ? null : Number(r[c.key]);
+        if (c.strong && meta.refs) meta.refs.set(r, `'${KIND_LABEL[kind]}'!${ws.getColumn(i + 1).letter}${4 + ri}`);
         const orig = fxOrig(r, c.key);
         cell.numFmt = orig ? `#,##0.00 "₪ ${orig}"` : '#,##0.00 "₪"';
       }
