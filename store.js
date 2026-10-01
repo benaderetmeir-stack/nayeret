@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   autoClosedThrough: "",
   warnDay: 10,
   autoCloseDay: 16,
+  recurIgnore: [],
   recentEmails: []
 };
 
@@ -139,6 +140,27 @@ export class FirebaseStore {
     return { bytes, docs: all.size };
   }
 
+  // אינדקס ספקים לזיהוי חשבוניות קבועות: settings/suppliers = {v, s:{key:{name, m:[YYYY-MM]}}}
+  async getSupplierStats(keyFn) {
+    const ref = this._doc("settings", "suppliers");
+    const snap = await this.F.getDoc(ref);
+    if (snap.exists() && snap.data().v === 1) return snap.data().s || {};
+    const all = await this.F.getDocs(this.F.query(this._col("docs"), this.F.where("kind", "==", "invoice")));
+    const s = {};
+    all.docs.forEach((d) => {
+      const x = d.data(), k = keyFn(x.supplier), m = (x.date || "").slice(0, 7);
+      if (!k || !m) return;
+      (s[k] ||= { name: x.supplier, m: [] });
+      if (!s[k].m.includes(m)) s[k].m.push(m);
+    });
+    await this.F.setDoc(ref, { v: 1, s });
+    return s;
+  }
+  async addSupplierMonth(key, name, month) {
+    if (!key || !month) return;
+    await this.F.setDoc(this._doc("settings", "suppliers"), { v: 1, s: { [key]: { name, m: this.F.arrayUnion(month) } } }, { merge: true });
+  }
+
   // תיבת "ממתינים לאישור": מסמכים שנשלחו מהאייפון (קיצור "שלח לניירת")
   async listInbox() {
     const snap = await this.F.getDocs(this._col("inbox"));
@@ -180,6 +202,17 @@ export class DemoStore {
     const bytes = this.docs.reduce((n, d) => n + docBytes(d, (this.pages[d.id] || []).map((p) => p.data)), 0);
     return { bytes, docs: this.docs.length };
   }
+  async getSupplierStats(keyFn) {
+    const s = {};
+    this.docs.filter((x) => x.kind === "invoice").forEach((x) => {
+      const k = keyFn(x.supplier), m = (x.date || "").slice(0, 7);
+      if (!k || !m) return;
+      (s[k] ||= { name: x.supplier, m: [] });
+      if (!s[k].m.includes(m)) s[k].m.push(m);
+    });
+    return s;
+  }
+  async addSupplierMonth() {}
   async listInbox() { return (this.inbox || []).slice(); }
   async deleteInbox(ids) { this.inbox = (this.inbox || []).filter((x) => !ids.includes(x.id)); }
   async addReport(entry) { this.reports.unshift({ ...entry, id: "r" + Date.now(), createdAt: Date.now() }); }

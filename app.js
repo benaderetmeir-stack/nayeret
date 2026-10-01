@@ -3,6 +3,7 @@ import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
 import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js";
 import { recognize } from "./ocr.js";
 import { getRate, curSign } from "./fx.js";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js";
 import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig } from "./reports.js";
 
 const $ = (id) => document.getElementById(id);
@@ -31,6 +32,64 @@ function isClosed(ym) {
 }
 const warnDay = () => Number(state.settings?.warnDay) || 10;
 const autoCloseDay = () => Number(state.settings?.autoCloseDay) || 16;
+// ===== חשבוניות קבועות =====
+const ignoreMap = () => Object.fromEntries((state.settings?.recurIgnore || []).map((x) => x.split("|")));
+const missingFor = (m) => state.recur ? missingRecurring(state.recur, m, ignoreMap()) : [];
+function missingText(months) {
+  const items = [].concat(months).flatMap((m) => missingFor(m).map((x) => `${x.name} (${x.label}${[].concat(months).length > 1 ? `, ${shortMonth(m)}` : ""})`));
+  return items.length ? `\n\nייתכן שחסרות חשבוניות קבועות:\n${items.map((t) => "• " + t).join("\n")}` : "";
+}
+async function loadRecur() {
+  try { state.recur = await state.store.getSupplierStats(supplierKey); } catch (e) { console.warn("recur", e); state.recur = null; }
+  renderMonthBar(); if (state.view === "settings") renderRecurSettings();
+}
+function noteSupplier(meta) {
+  if (meta.kind !== "invoice" || !meta.supplier || !meta.date) return;
+  const k = supplierKey(meta.supplier), m = meta.date.slice(0, 7);
+  if (!k) return;
+  if (state.recur) { (state.recur[k] ||= { name: meta.supplier, m: [] }); if (!state.recur[k].m.includes(m)) state.recur[k].m.push(m); }
+  state.store.addSupplierMonth(k, meta.supplier, m).catch((e) => console.warn(e));
+}
+async function setIgnore(keys, on) {
+  const list = (state.settings.recurIgnore || []).filter((x) => !keys.includes(x.split("|")[0]));
+  if (on) keys.forEach((k) => list.push(`${k}|${ymOf(new Date())}`));
+  state.settings.recurIgnore = list;
+  await state.store.saveSettings({ recurIgnore: list });
+}
+function renderRecurLine() {
+  const el = $("recurLine");
+  const show = state.view === "invoice" && !state.search && state.month < ymOf(new Date()) && !isClosed(state.month);
+  const miss = show ? missingFor(state.month) : [];
+  el.hidden = !miss.length;
+  if (miss.length) el.innerHTML = `ייתכן שחסרות: <b>${miss.map((x) => esc(x.name)).join(" · ")}</b> <button type="button" class="link-btn" id="recurMore">פרטים</button>`;
+}
+function openRecurDlg(month) {
+  const miss = missingFor(month);
+  $("recurTitle").textContent = `חשבוניות קבועות שעוד לא הגיעו · ${monthName(month)}`;
+  $("recurList").innerHTML = miss.map((x, i) => `<li><div><b>${esc(x.name)}</b><div class="rl-freq">מגיעה בדרך כלל ${esc(x.label)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-rc-ign="${i}">לא להזכיר</button></li>`).join("") || `<li class="hint">הכול הגיע 👍</li>`;
+  $("recurList").onclick = async (e) => {
+    const b = e.target.closest("[data-rc-ign]"); if (!b) return;
+    await setIgnore(miss[Number(b.dataset.rcIgn)].keys, true);
+    toast("לא נזכיר יותר על הספק הזה"); openRecurDlg(month); renderMonthBar();
+  };
+  if (!$("recurDlg").open) $("recurDlg").showModal();
+}
+document.addEventListener("click", (e) => { if (e.target.id === "recurMore") openRecurDlg(state.month); });
+function renderRecurSettings() {
+  const el = $("recurSettings"); if (!el) return;
+  if (!state.recur) { el.innerHTML = `<li class="hint">טוען…</li>`; return; }
+  const ign = ignoreMap();
+  const list = recurringList(state.recur, shiftMonth(ymOf(new Date()), -1));
+  el.innerHTML = list.length ? list.map((x, i) => {
+    const muted = x.keys.some((k) => ign[k]);
+    return `<li class="${muted ? "is-muted" : ""}"><div><b>${esc(x.name)}</b> <span class="rl-freq">· ${esc(x.label)}${muted ? " · לא מזכירים" : ""}</span></div><button type="button" class="btn btn-ghost btn-sm" data-rs="${i}">${muted ? "להזכיר שוב" : "לא להזכיר"}</button></li>`;
+  }).join("") : `<li class="hint">עדיין אין מספיק היסטוריה. אחרי כ-3 חודשים של חשבוניות יופיעו כאן הספקים הקבועים.</li>`;
+  el.onclick = async (e) => {
+    const b = e.target.closest("[data-rs]"); if (!b) return;
+    const x = list[Number(b.dataset.rs)], muted = x.keys.some((k) => ign[k]);
+    await setIgnore(x.keys, !muted); renderRecurSettings();
+  };
+}
 async function setClosed(months, closed) {
   const st = state.settings;
   const c = new Set(st.closedMonths || []), r = new Set(st.reopenedMonths || []);
@@ -118,6 +177,7 @@ async function enterApp() {
   catch (e) { console.error(e); toast("לא הצלחתי לטעון הגדרות. ייתכן שחסרה הרשאה למשתמש.", 6000); state.settings = { closedMonths: [], recentEmails: [], vatRate: 18 }; }
   $("bizName").textContent = state.settings.businessName || "";
   await autoCloseMonths();
+  loadRecur();
   setView(location.hash.replace("#", "") || "invoice");
   refreshUsage();
   refreshInbox();
@@ -136,7 +196,7 @@ function setView(v) {
   history.replaceState(null, "", "#" + v);
   if (v === "invoice" || v === "other") { state.selected.clear(); loadRows(); }
   if (v === "reports") initReports();
-  if (v === "settings") { fillSettings(); refreshUsage(); }
+  if (v === "settings") { fillSettings(); refreshUsage(); renderRecurSettings(); }
 }
 
 /* ======================= טבלאות ======================= */
@@ -162,7 +222,7 @@ $("closeMonthBtn").onclick = async () => {
   const m = state.month, closed = isClosed(m);
   const ok = await confirmBox(closed
     ? `לפתוח מחדש את ${monthName(m)}? מסמכים חדשים מהחודש הזה ייכנסו אליו ולא לחודש הנוכחי. הוא יישאר פתוח עד שתסגרי אותו שוב.`
-    : `לסגור את ${monthName(m)} כנשלח לרואה החשבון? מסמך שיגיע מעכשיו עם תאריך מהחודש הזה ייכנס לחודש הפתוח הנוכחי, עם סימון איחור.`,
+    : `לסגור את ${monthName(m)} כנשלח לרואה החשבון? מסמך שיגיע מעכשיו עם תאריך מהחודש הזה ייכנס לחודש הפתוח הנוכחי, עם סימון איחור.${missingText(m)}`,
     closed ? "פתח מחדש" : "סגור חודש", false);
   if (!ok) return;
   await setClosed(m, !closed);
@@ -184,13 +244,15 @@ function renderMonthBar() {
   if (pend.length) {
     const prev = shiftMonth(ymOf(new Date()), -1);
     const auto = pend.includes(prev) ? ` · ייסגר אוטומטית ב-${autoCloseDay()}/${String(new Date().getMonth() + 1).padStart(2, "0")}` : "";
-    w.textContent = `⚠ ${pend.map((m) => monthName(m)).join(", ")} עדיין לא ${pend.length > 1 ? "נסגרו" : "נסגר"}${auto} · לסגירה`;
+    const nMiss = pend.reduce((n, m) => n + missingFor(m).length, 0);
+    w.textContent = `⚠ ${pend.map((m) => monthName(m)).join(", ")} עדיין לא ${pend.length > 1 ? "נסגרו" : "נסגר"}${auto}${nMiss ? ` · ${nMiss === 1 ? "חשבונית קבועה אחת חסרה" : `${nMiss} חשבוניות קבועות חסרות`}` : ""} · לסגירה`;
   }
+  renderRecurLine();
 }
 $("closeWarn").onclick = async () => {
   const pend = pendingMonths(); if (!pend.length) return;
   const names = pend.map(monthName).join(", ");
-  if (!(await confirmBox(`לסגור את ${names} כנשלח לרואה החשבון?`, "כן, סגור", false))) return;
+  if (!(await confirmBox(`לסגור את ${names} כנשלח לרואה החשבון?${missingText(pend)}`, "כן, סגור", false))) return;
   await setClosed(pend, true);
   toast(`${names} סומן כנשלח לרואה החשבון`);
   renderMonthBar();
@@ -706,6 +768,7 @@ $("upReview").addEventListener("submit", async (e) => {
 
   const btn = $("rvSave"); btn.disabled = true; btn.textContent = "שומר…";
   try {
+    noteSupplier(meta);
     if (up.edit) {
       await state.store.updateDoc(up.edit.id, meta);
       toast("הפרטים עודכנו");
@@ -860,7 +923,7 @@ async function runReport(p) {
     const cur = ymOf(new Date());
     const ms = p.by === "month" ? [p.month] : (() => { const a = []; for (let m = p.monthFrom; m <= p.monthTo && a.length < 36; m = shiftMonth(m, 1)) a.push(m); return a; })();
     const open = ms.filter((m) => m < cur && !isClosed(m));
-    if (open.length && await confirmBox(`לסמן את ${open.map(monthName).join(", ")} כנשלח לרואה החשבון? מסמכים שיגיעו אחר כך מהתקופה הזו ייכנסו לחודש הנוכחי עם סימון "באיחור".`, "כן, סמן כנשלח", false)) {
+    if (open.length && await confirmBox(`לסמן את ${open.map(monthName).join(", ")} כנשלח לרואה החשבון? מסמכים שיגיעו אחר כך מהתקופה הזו ייכנסו לחודש הנוכחי עם סימון "באיחור".${missingText(open)}`, "כן, סמן כנשלח", false)) {
       await setClosed(open, true); toast("סומן כנשלח לרואה החשבון");
     }
   }

@@ -76,6 +76,8 @@
         </div>
       </div>
 
+      <p class="recur-line" id="recurLine" hidden></p>
+
       <div class="search-bar">
         <div class="search-main">
           <input id="searchText" type="search" placeholder="חיפוש: ספק, שם או מס' חשבונית">
@@ -176,6 +178,11 @@
           <span class="hint" id="usageSub"></span>
         </div>
         <p class="notice notice-warn" id="usageWarn" hidden></p>
+      </div>
+      <div class="panel" id="recurPanel">
+        <h2 class="panel-title">ספקים קבועים שזוהו</h2>
+        <p class="panel-lead">המערכת לומדת לבד אילו ספקים שולחים חשבונית כל חודש, כל חודשיים או פעם בשנה, ומזכירה כשמשהו חסר, רק בסגירת חודש. ככל שיש יותר היסטוריה, הזיהוי מדויק יותר.</p>
+        <ul class="recur-list" id="recurSettings"></ul>
       </div>
       <div class="panel" id="cleanupPanel">
         <h2 class="panel-title">פינוי מקום</h2>
@@ -369,6 +376,16 @@
     <div class="row-actions" style="margin-bottom:12px"><button class="btn btn-primary" id="inboxAll">טיפול בכולם לפי הסדר</button></div>
     <ul class="inbox-list" id="inboxList"></ul>
   </div>
+</dialog>
+
+<!-- ===== חשבוניות קבועות שחסרות ===== -->
+<dialog id="recurDlg" class="dlg dlg-small">
+  <div class="dlg-head">
+    <h2 id="recurTitle">חשבוניות קבועות שעוד לא הגיעו</h2>
+    <button class="icon-btn" data-close aria-label="סגירה">✕</button>
+  </div>
+  <p class="hint" style="margin-bottom:10px">המערכת למדה מהחודשים הקודמים שהספקים האלה שולחים חשבונית בקביעות. אם ספק כבר לא רלוונטי, לחצי "לא להזכיר".</p>
+  <ul class="recur-list" id="recurList"></ul>
 </dialog>
 
 <!-- ===== בחירת חודש ===== -->

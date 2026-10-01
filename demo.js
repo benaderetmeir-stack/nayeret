@@ -46,6 +46,8 @@ export async function seedDemo(store) {
     inv("מעבדות גל-טק", "88207", day(prev, 4), 1770, { lines: [["תחזוקת מכשיר", "1,500.00"]] }),
     inv("דפוס אלון", "5461", day(prev, 11), 354, { lines: [["עלונים", "300.00"]] }),
     inv("פרחי הדר", "1142", day(prev, 18), 150, { exempt: true, lines: [["זר לקבלה", "150.00"]] }),
+    // היסטוריה של ספק חודשי, כדי להדגים "חשבוניות קבועות שחסרות"
+    ...[2, 3, 4].map((n) => { const d = new Date(now.getFullYear(), now.getMonth() - n, 16); const m = ym(d); return inv("פלאפון תקשורת בע\"מ", "77" + n, day(m, 16), 129.9, { lines: [["חבילת סלולר", "110.08"]] }); }),
     { kind: "other", docType: "תלוש שכר", name: "עובדת א'", date: day(cur, 1), amount: 7420, note: "", month: cur, origMonth: cur, lines: [["שכר ברוטו", "9,100.00"], ["ניכויים", "1,680.00"]] },
     { kind: "other", docType: "העברת משכורת", name: "עובדת א'", date: day(cur, 9), amount: 7420, note: "", month: cur, origMonth: cur, lines: [["העברה בנקאית", "7,420.00"]] },
     { kind: "other", docType: "תעודת משלוח", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 3), amount: null, note: "תואם לחשבונית 20931", month: cur, origMonth: cur, lines: [["סרום היאלורוני", "12 יח'"], ["מסכות אלגינט", "20 יח'"]] },

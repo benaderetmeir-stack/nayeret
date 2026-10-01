@@ -412,3 +412,12 @@ button, input, select { font: inherit; color: inherit; }
 .fx-link-row { margin-top: -6px; }
 .fx-pill { background: var(--sky-2); color: var(--blue); }
 .fx-orig { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); font-family: var(--font); }
+
+/* ===== חשבוניות קבועות ===== */
+.recur-line { margin: -4px 0 0; font-size: 13px; color: var(--ink-2); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.recur-line b { color: var(--warn); font-weight: 700; }
+.recur-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.recur-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; flex-wrap: wrap; }
+.recur-list li.is-muted { opacity: .55; }
+.recur-list .rl-freq { font-size: 13px; color: var(--ink-2); }
+#cfText { white-space: pre-line; }
