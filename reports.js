@@ -37,8 +37,9 @@ export function categorySummary(sections, catOf) {
     let cat, amt;
     if (kind === "invoice") { cat = r.category || catOf(r) || UNCAT; amt = Number(r.total) || 0; }
     else { cat = OTHER_CAT[r.docType]; amt = Number(r.amount) || 0; if (!cat || !amt) continue; }
-    const x = map.get(cat) || { cat, total: 0, count: 0 };
+    const x = map.get(cat) || { cat, total: 0, count: 0, items: [] };
     x.total = Math.round((x.total + amt) * 100) / 100; x.count++; map.set(cat, x);
+    x.items.push({ date: r.date || "", name: kind === "invoice" ? (r.supplier || "") : (r.name || ""), ref: kind === "invoice" ? (r.invoiceNumber || "") : (r.docType || ""), amount: amt });
   }
   const list = [...map.values()].sort((a, b) => b.total - a.total);
   return { list, total: Math.round(list.reduce((n, x) => n + x.total, 0) * 100) / 100 };
@@ -369,7 +370,39 @@ function addSummarySheet(wb, summary, meta) {
   const tr = ws.getRow(4 + summary.list.length);
   tr.getCell(1).value = 'סה"כ'; tr.getCell(3).value = { formula: `SUM(C4:C${3 + summary.list.length})`, result: summary.total }; tr.getCell(3).numFmt = '#,##0.00 "₪"';
   [1, 2, 3, 4].forEach((i) => { tr.getCell(i).font = { name: "Arial", bold: true, color: { argb: "FF0E6A8C" } }; tr.getCell(i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4F4FA" } }; });
-  ws.getColumn(1).width = 26; ws.getColumn(2).width = 10; ws.getColumn(3).width = 16; ws.getColumn(4).width = 10;
+  ws.getColumn(1).width = 30; ws.getColumn(2).width = 12; ws.getColumn(3).width = 18; ws.getColumn(4).width = 18;
+  // פס צבעוני בתוך תא הסכום, באורך יחסי לגודל הקטגוריה
+  if (summary.list.length) ws.addConditionalFormatting({ ref: `C4:C${3 + summary.list.length}`, rules: [{ type: "dataBar", minLength: 0, maxLength: 100, gradient: false, color: { argb: "FF5CCFD8" }, cfvo: [{ type: "num", value: 0 }, { type: "max" }] }] });
+
+  // פירוט: כל המסמכים בכל קטגוריה, עם סיכום ביניים
+  let y = 6 + summary.list.length;
+  ws.mergeCells(y, 1, y, 4); const dt = ws.getCell(y, 1); dt.value = "פירוט לפי קטגוריות";
+  dt.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+  dt.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0E6A8C" } }; ws.getRow(y).height = 24; y += 2;
+  summary.list.forEach((r, ci) => {
+    const color = "FF" + CAT_COLORS[ci % CAT_COLORS.length];
+    ws.mergeCells(y, 1, y, 4); const h = ws.getCell(y, 1);
+    h.value = `${r.cat} · ${r.count === 1 ? "מסמך אחד" : r.count + " מסמכים"}`;
+    h.font = { name: "Arial", size: 12, bold: true, color: { argb: "FFFFFFFF" } };
+    h.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } }; ws.getRow(y).height = 20; y++;
+    ["ספק / שם", "תאריך", "סכום", "מס' חשבונית / סוג"].forEach((t, i) => { const c = ws.getRow(y).getCell(i + 1); c.value = t; c.font = { name: "Arial", bold: true, color: { argb: "FF0B3448" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF6FA" } }; });
+    y++;
+    const first = y;
+    [...r.items].sort((a, b) => a.date.localeCompare(b.date)).forEach((it) => {
+      const row = ws.getRow(y);
+      row.getCell(1).value = it.name;
+      row.getCell(2).value = it.date ? fmtDate(it.date) : "";
+      row.getCell(3).value = it.amount; row.getCell(3).numFmt = '#,##0.00 "₪"';
+      row.getCell(4).value = it.ref; row.getCell(4).alignment = { horizontal: "right" };
+      [1, 2, 3, 4].forEach((i) => { row.getCell(i).font = { name: "Arial" }; row.getCell(i).border = { bottom: { style: "hair", color: { argb: "FFCDE3EA" } } }; });
+      y++;
+    });
+    const st = ws.getRow(y);
+    st.getCell(1).value = `סה"כ ${r.cat}`;
+    st.getCell(3).value = { formula: `SUM(C${first}:C${y - 1})`, result: r.total }; st.getCell(3).numFmt = '#,##0.00 "₪"';
+    [1, 2, 3, 4].forEach((i) => { st.getCell(i).font = { name: "Arial", bold: true, color: { argb: "FF0E6A8C" } }; st.getCell(i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4F4FA" } }; });
+    y += 2;
+  });
 }
 
 function addSheet(wb, rows, kind, meta) {
