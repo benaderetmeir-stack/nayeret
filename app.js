@@ -1,10 +1,11 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261004";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261004";
-import { recognize } from "./ocr.js?v=20261004";
-import { getRate, curSign } from "./fx.js?v=20261004";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261004";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261004";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261004b";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261004b";
+import { recognize } from "./ocr.js?v=20261004b";
+import { getRate, curSign } from "./fx.js?v=20261004b";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261004b";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261004b";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261004b";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -39,6 +40,7 @@ function missingText(months) {
   const items = [].concat(months).flatMap((m) => missingFor(m).map((x) => `${x.name} (${x.label}${[].concat(months).length > 1 ? `, ${shortMonth(m)}` : ""})`));
   return items.length ? `\n\nייתכן שחסרות חשבוניות קבועות:\n${items.map((t) => "• " + t).join("\n")}` : "";
 }
+async function loadPrices() { try { state.prices = await state.store.getPrices(); } catch (e) { console.warn("prices", e); state.prices = null; } }
 async function loadRecur() {
   try { state.recur = await state.store.getSupplierStats(supplierKey); } catch (e) { console.warn("recur", e); state.recur = null; }
   renderMonthBar(); if (state.view === "settings") renderRecurSettings();
@@ -152,7 +154,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261004");
+    const { seedDemo } = await import("./demo.js?v=20261004b");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -177,7 +179,7 @@ async function enterApp() {
   catch (e) { console.error(e); toast("לא הצלחתי לטעון הגדרות. ייתכן שחסרה הרשאה למשתמש.", 6000); state.settings = { closedMonths: [], recentEmails: [], vatRate: 18 }; }
   $("bizName").textContent = state.settings.businessName || "";
   await autoCloseMonths();
-  loadRecur();
+  loadRecur(); loadPrices();
   setView(location.hash.replace("#", "") || "invoice");
   refreshUsage();
   refreshInbox();
@@ -603,6 +605,7 @@ function fillReview(d, rec) {
   $("rvName").value = d.name || ""; $("rvAmount").value = d.amount ?? "";
   $("rvNote").value = d.note || "";
   $("rvDetails").value = d.details || "";
+  up.items = Array.isArray(d.items) ? d.items : [];
   catTouched = false;
   // עריכה: מה שנשמר. חדש: מה שנלמד על הספק קודם, ורק אחר כך הניחוש של הזיהוי
   setCat(up.edit ? (d.category || catMemory(d.supplier)) : (catMemory(d.supplier) || d.category || (d.kind !== "other" && rec?.ok ? (rec.result.category || "") : "")));
@@ -616,6 +619,7 @@ function fillReview(d, rec) {
   else syncDate();
   $("rvDup").hidden = true; up.dupFound = null;
   checkDup();
+  renderPriceAlert();
   setTimeout(() => (d.supplier ? $("rvSave") : (curKind() === "invoice" ? $("rvSupplier") : $("rvDocTypeSel"))).focus({ preventScroll: true }), 60);
 }
 function renderReviewImg() {
@@ -644,7 +648,26 @@ function setCat(value) {
 }
 const currentCat = () => $("rvCat").value === CAT_OTHER ? $("rvCatOther").value.trim() : $("rvCat").value;
 $("rvCat").addEventListener("change", () => { catTouched = true; const o = $("rvCat").value === CAT_OTHER; $("rvCatOtherBox").hidden = !o; if (o) setTimeout(() => $("rvCatOther").focus(), 30); });
+$("rvSupplier").addEventListener("change", renderPriceAlert);
 $("rvSupplier").addEventListener("change", () => { if (!catTouched) { const m = catMemory($("rvSupplier").value); if (m) setCat(m); } });
+
+// ===== התייקרות מוצרים אצל ספק: שורה מודגשת במסך האישור =====
+function renderPriceAlert() {
+  const box = $("rvPriceAlert");
+  const k = supplierKey($("rvSupplier").value);
+  const list = curKind() === "invoice" && !up.edit && k && state.prices ? priceAlerts(state.prices[k], up.items, $("rvDateI").value) : [];
+  box.hidden = !list.length;
+  if (!list.length) return;
+  const since = (d) => d ? ` <small>(לעומת ${fmtDate(d).slice(3)})</small>` : "";
+  box.innerHTML = `⚠️ ${list.length === 1 ? "מוצר התייקר" : "מוצרים התייקרו"} אצל הספק:<ul>${list.map((a) => `<li>${esc(a.name)}: ₪${fmtMoney(a.from)} ← ₪${fmtMoney(a.to)} ליחידה (+${a.pct}%)${since(a.d)}</li>`).join("")}</ul>`;
+}
+function notePrices(meta) {
+  if (meta.kind !== "invoice" || !meta.items?.length || (meta.currency && meta.currency !== "ILS")) return;
+  const k = supplierKey(meta.supplier); if (!k) return;
+  const next = mergePrices(state.prices?.[k], meta.items, meta.date);
+  if (state.prices) state.prices[k] = next;
+  state.store.savePrices(k, next).catch((e) => console.warn("prices", e));
+}
 
 // ===== מטבע זר: הסכום מומר לשקלים לפי השער היציג ביום החשבונית =====
 const fx = { on: false, reqId: 0, date: "", source: "" };
@@ -707,6 +730,7 @@ function updateMonthHint() {
   else if (orig && m && orig !== m) { h.hidden = false; h.textContent = `המסמך מ-${shortMonth(orig)} ישויך ידנית ל-${shortMonth(m)}.`; }
   else h.hidden = true;
 }
+$("rvDateI").addEventListener("change", renderPriceAlert);
 $("rvDateI").addEventListener("change", syncDate); $("rvDateO").addEventListener("change", syncDate);
 $("rvMonth").addEventListener("change", () => { up.manualMonth = true; updateMonthHint(); });
 
@@ -768,7 +792,7 @@ $("upReview").addEventListener("submit", async (e) => {
     Object.assign(meta, {
       supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), exempt: $("rvExempt").checked,
       total: numVal($("rvTotal")), vat: $("rvExempt").checked ? 0 : numVal($("rvVat")), net: numVal($("rvNet")),
-      docType: "", name: "", amount: null, category: currentCat()
+      docType: "", name: "", amount: null, category: currentCat(), items: up.items || []
     });
     if (meta.category && !catList().includes(meta.category)) {
       state.settings.customCats = [...(state.settings.customCats || []), meta.category].slice(-20);
@@ -798,6 +822,7 @@ $("upReview").addEventListener("submit", async (e) => {
   const btn = $("rvSave"); btn.disabled = true; btn.textContent = "שומר…";
   try {
     noteSupplier(meta);
+    notePrices(meta);
     if (up.edit) {
       await state.store.updateDoc(up.edit.id, meta);
       toast("הפרטים עודכנו");

@@ -165,6 +165,12 @@ export class FirebaseStore {
     await this.F.setDoc(this._doc("settings", "suppliers"), { v: 1, s: { [key]: entry } }, { merge: true });
   }
 
+  // מחירים אחרונים לכל ספק: settings/prices = {p:{supplierKey:{itemKey:{n,u,d}}}}
+  async getPrices() { const s = await this.F.getDoc(this._doc("settings", "prices")); return (s.exists() && s.data().p) || {}; }
+  async savePrices(key, map) {
+    await this.F.setDoc(this._doc("settings", "prices"), { p: { [key]: map } }, { mergeFields: [new this.F.FieldPath("p", key)] });
+  }
+
   // תיבת "ממתינים לאישור": מסמכים שנשלחו מהאייפון (קיצור "שלח לניירת")
   async listInbox() {
     const snap = await this.F.getDocs(this._col("inbox"));
@@ -219,6 +225,8 @@ export class DemoStore {
     return s;
   }
   async addSupplierMonth(key, name, month, cat) { if (cat) (this._cats ||= {})[key] = cat; }
+  async getPrices() { return JSON.parse(JSON.stringify(this._prices || {})); }
+  async savePrices(key, map) { (this._prices ||= {})[key] = map; }
   async listInbox() { return (this.inbox || []).slice(); }
   async deleteInbox(ids) { this.inbox = (this.inbox || []).filter((x) => !ids.includes(x.id)); }
   async addReport(entry) { this.reports.unshift({ ...entry, id: "r" + Date.now(), createdAt: Date.now() }); }

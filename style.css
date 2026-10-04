@@ -131,6 +131,10 @@ button, input, select { font: inherit; color: inherit; }
 .notice { border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 .notice-info { background: var(--sky); color: var(--blue); }
 .notice-warn { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.price-alert { background: #FFF1E6; color: #B4410F; border: 2px solid #F08A4B; font-weight: 700; font-size: 15px; }
+.price-alert ul { margin: 6px 0 0; padding-inline-start: 18px; }
+.price-alert li { margin: 2px 0; }
+.price-alert small { font-weight: 500; color: #8A5A3C; }
 
 /* ===== כניסה ===== */
 .login {

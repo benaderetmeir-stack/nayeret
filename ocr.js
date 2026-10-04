@@ -19,6 +19,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
   "category": string,         // for invoices only, one of: "חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר". The business is a medical-cosmetics clinic.
 "details": string,          // short Hebrew summary (max ~70 chars). Invoice: what was bought / which service, e.g. "סרום היאלורוני x12, מסכות אלגינט x20" or "ניקיון חודשי". Salary/money transfer: "הועבר ל<recipient> סך של ₪<amount>" (+ purpose if shown). Bank / credit-card statement: the main payees. Other: what the document is about.
+  "items": [{"name": string, "qty": number|null, "unitPrice": number|null}],  // invoice line items (max 15): product/service name as printed, quantity, price for ONE unit. Use the price BEFORE VAT when lines are listed before VAT (usual in חשבונית מס); for an exempt dealer, as printed. Skip discount, shipping-only and VAT lines. [] for other paperwork or if unreadable.
   "note": string              // very short Hebrew note if something important is unclear, else ""
 }
 Rules:
@@ -66,6 +67,7 @@ export function normalizeResult(r) {
     amount: num(r.amount),
     currency: normCur(r.currency),
     category: String(r.category || "").trim(),
+    items: (Array.isArray(r.items) ? r.items : []).slice(0, 15).map((it) => ({ name: String(it?.name || "").trim().slice(0, 80), qty: num(it?.qty), unitPrice: num(it?.unitPrice) })).filter((it) => it.name),
     details: String(r.details || "").replace(/\s+/g, " ").trim().slice(0, 160),
     note: String(r.note || "").trim()
   };
