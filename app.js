@@ -1,10 +1,10 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js";
-import { recognize } from "./ocr.js";
-import { getRate, curSign } from "./fx.js";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261004";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261004";
+import { recognize } from "./ocr.js?v=20261004";
+import { getRate, curSign } from "./fx.js?v=20261004";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261004";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261004";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -152,7 +152,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js");
+    const { seedDemo } = await import("./demo.js?v=20261004");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
