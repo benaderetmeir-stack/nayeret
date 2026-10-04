@@ -80,7 +80,7 @@
 
       <div class="search-bar">
         <div class="search-main">
-          <input id="searchText" type="search" placeholder="חיפוש: ספק, שם או מס' חשבונית">
+          <input id="searchText" type="search" placeholder="חיפוש: ספק, שם, מס' חשבונית או מה נקנה">
           <button class="btn btn-ghost btn-sm" id="searchToggle" aria-expanded="false">סינון מתקדם</button>
         </div>
         <div class="search-adv" id="searchAdv" hidden>
@@ -336,6 +336,7 @@
         <label class="field"><span>סכום ₪</span><input id="rvAmount" type="number" step="0.01" inputmode="decimal"></label>
       </div>
 
+      <label class="field"><span>פירוט (מה נקנה / למי הועבר)</span><input id="rvDetails" autocomplete="off" maxlength="160"></label>
       <label class="field"><span>הערה</span><input id="rvNote" autocomplete="off"></label>
       <label class="field"><span>שיוך לחודש (תיקייה)</span><input id="rvMonth" type="month"></label>
       <p class="hint" id="rvMonthHint" hidden></p>

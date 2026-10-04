@@ -197,6 +197,13 @@ async function renderTablePages(pdf, rows, kind, meta, { linked = false }) {
         }
         const t = col.key === "idx" ? String(ri + 1) : cellText(r, col.key);
         const orig = fxOrig(r, col.key);
+        if (col.key === "note" && r.details) {   // הערה + פירוט באפור מתחתיה
+          ctx.textAlign = "right"; ctx.fillStyle = INK2;
+          if (t) { ctx.font = `400 12px ${FONT}`; ctx.fillText(fitText(ctx, t, w - 18), x + w - 10, y + RH / 2 - 8); }
+          ctx.fillStyle = "#8A9BA6"; ctx.font = `400 11px ${FONT}`;
+          ctx.fillText(fitText(ctx, r.details, w - 18), x + w - 10, y + RH / 2 + (t ? 9 : 0));
+          return;
+        }
         ctx.fillStyle = col.key === "idx" || col.key === "note" ? INK2 : (col.strong ? BLUE : INK);
         ctx.font = `${col.strong ? 700 : col.key === "supplier" || col.key === "name" ? 600 : 400} ${col.key === "note" ? 12 : 14}px ${FONT}`;
         ctx.textAlign = col.money ? "left" : "right";
@@ -454,6 +461,7 @@ function addSheet(wb, rows, kind, meta) {
         cell.numFmt = orig ? `#,##0.00 "₪ ${orig}"` : '#,##0.00 "₪"';
       }
       else if (c.key === "date") { if (r.date) { const [y, m, d] = r.date.split("-").map(Number); cell.value = new Date(Date.UTC(y, m - 1, d)); cell.numFmt = "dd/mm/yyyy"; } }
+      else if (c.key === "note" && r.details) { const t = cellText(r, c.key); cell.value = t ? `${t}\n${r.details}` : r.details; cell.alignment = { wrapText: true, vertical: "top" }; }
       else cell.value = cellText(r, c.key);
       cell.font = { name: "Arial", bold: !!c.strong, color: { argb: c.strong ? "FF0E6A8C" : "FF0B3448" } };
       cell.border = { bottom: { style: "thin", color: { argb: "FFD3E8F0" } } };

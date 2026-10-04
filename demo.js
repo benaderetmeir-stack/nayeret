@@ -34,7 +34,7 @@ export async function seedDemo(store) {
   const inv = (supplier, no, date, total, opts = {}) => {
     const exempt = !!opts.exempt;
     const vat = exempt ? 0 : Math.round(total / 1.18 * 0.18 * 100) / 100;
-    return { kind: "invoice", category: opts.cat || "", supplier, invoiceNumber: no, date, total, vat, net: Math.round((total - vat) * 100) / 100, exempt, docType: "חשבונית מס קבלה", note: opts.note || "", month: opts.month || date.slice(0, 7), origMonth: date.slice(0, 7), late: !!opts.late, lines: opts.lines };
+    return { kind: "invoice", category: opts.cat || "", supplier, invoiceNumber: no, date, total, vat, net: Math.round((total - vat) * 100) / 100, exempt, docType: "חשבונית מס קבלה", note: opts.note || "", details: opts.details ?? (opts.lines || []).map((l) => l[0]).join(", "), month: opts.month || date.slice(0, 7), origMonth: date.slice(0, 7), late: !!opts.late, lines: opts.lines };
   };
   const items = [
     inv("מאור ציוד אסתטי בע\"מ", "20931", day(cur, 3), 2360, { cat: "חומרים ותכשירים", lines: [["סרום היאלורוני x12", "1,440.00"], ["מסכות אלגינט x20", "560.00"]] }),
@@ -49,7 +49,7 @@ export async function seedDemo(store) {
     // היסטוריה של ספק חודשי, כדי להדגים "חשבוניות קבועות שחסרות"
     ...[2, 3, 4].map((n) => { const d = new Date(now.getFullYear(), now.getMonth() - n, 16); const m = ym(d); return inv("פלאפון תקשורת בע\"מ", "77" + n, day(m, 16), 129.9, { lines: [["חבילת סלולר", "110.08"]] }); }),
     { kind: "other", docType: "תלוש שכר", name: "עובדת א'", date: day(cur, 1), amount: 7420, note: "", month: cur, origMonth: cur, lines: [["שכר ברוטו", "9,100.00"], ["ניכויים", "1,680.00"]] },
-    { kind: "other", docType: "העברת משכורת", name: "עובדת א'", date: day(cur, 9), amount: 7420, note: "", month: cur, origMonth: cur, lines: [["העברה בנקאית", "7,420.00"]] },
+    { kind: "other", docType: "העברת משכורת", name: "עובדת א'", date: day(cur, 9), amount: 7420, note: "", details: "הועבר לעובדת א' סך של ₪7,420 (משכורת)", month: cur, origMonth: cur, lines: [["העברה בנקאית", "7,420.00"]] },
     { kind: "other", docType: "תעודת משלוח", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 3), amount: null, note: "תואם לחשבונית 20931", month: cur, origMonth: cur, lines: [["סרום היאלורוני", "12 יח'"], ["מסכות אלגינט", "20 יח'"]] },
     { kind: "other", docType: "דף בנק", name: "בנק לדוגמה", date: day(prev, 30), amount: null, note: "", month: prev, origMonth: prev, lines: [["יתרת פתיחה", "—"], ["יתרת סגירה", "—"]] }
   ];

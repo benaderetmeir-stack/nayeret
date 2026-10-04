@@ -208,6 +208,8 @@ button, input, select { font: inherit; color: inherit; }
 .doc-table .col-idx { color: var(--ink-3); font-size: 13px; width: 36px; }
 .doc-table .name-cell { white-space: normal; min-width: 140px; font-weight: 600; }
 .doc-table .note-cell { white-space: normal; min-width: 120px; color: var(--ink-2); font-size: 14px; }
+.details-line { display: block; font-size: 12px; color: #8A9BA6; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vw-details { flex-basis: 100%; }
 .doc-table tfoot td { font-weight: 700; background: var(--sky); border-bottom: 0; font-size: 15px; }
 .doc-table tfoot td:first-child { border-end-start-radius: var(--radius); }
 .doc-table tfoot td:last-child { border-end-end-radius: var(--radius); }

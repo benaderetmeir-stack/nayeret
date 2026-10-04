@@ -269,7 +269,7 @@ async function loadRows() {
       rows = rows.filter((r) => r.kind === kind);
       if (s.text) {
         const q = s.text.toLowerCase();
-        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.docType, r.note].some((v) => String(v || "").toLowerCase().includes(q)));
+        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.docType, r.note, r.details].some((v) => String(v || "").toLowerCase().includes(q)));
       }
       if (s.amtFrom != null) rows = rows.filter((r) => (amountOf(r) ?? -Infinity) >= s.amtFrom);
       if (s.amtTo != null) rows = rows.filter((r) => (amountOf(r) ?? Infinity) <= s.amtTo);
@@ -295,7 +295,7 @@ function renderTable() {
     ${cols.map((c) => {
       if (c.key === "idx") return `<td class="col-idx">${i + 1}</td>`;
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
-      if (c.key === "note") return `<td class="note-cell">${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}</td>`;
+      if (c.key === "note") return `<td class="note-cell">${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
       const orig = fxOrig(r, c.key);
       return `<td class="${c.money ? "num" : ""}${c.strong ? " total-cell" : ""}">${esc(cellText(r, c.key))}${orig ? `<small class="fx-orig">${esc(orig)}</small>` : ""}</td>`;
@@ -416,7 +416,8 @@ async function openViewer(row) {
     row.kind === "invoice" ? `<span>לפני מע"מ: <b>${fmtMoney(row.net)}</b></span><span>מע"מ: <b>${fmtMoney(row.vat)}</b></span><span>סה"כ: <b>₪${fmtMoney(row.total)}</b></span>` : (row.amount != null ? `<span>סכום: <b>₪${fmtMoney(row.amount)}</b></span>` : ""),
     `<span>תיקייה: <b>${shortMonth(row.month)}</b></span>`,
     row.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(row.origMonth)}</span>` : "",
-    row.note ? `<span>הערה: <b>${esc(row.note)}</b></span>` : ""
+    row.note ? `<span>הערה: <b>${esc(row.note)}</b></span>` : "",
+    row.details ? `<span class="vw-details">פירוט: <b>${esc(row.details)}</b></span>` : ""
   ].join("");
   $("vwBody").innerHTML = `<div class="busy"><span class="spinner"></span>טוען…</div>`;
   $("viewDlg").showModal();
@@ -601,6 +602,7 @@ function fillReview(d, rec) {
   setDocType(d.docType && d.kind === "other" ? d.docType : "");
   $("rvName").value = d.name || ""; $("rvAmount").value = d.amount ?? "";
   $("rvNote").value = d.note || "";
+  $("rvDetails").value = d.details || "";
   catTouched = false;
   // עריכה: מה שנשמר. חדש: מה שנלמד על הספק קודם, ורק אחר כך הניחוש של הזיהוי
   setCat(up.edit ? (d.category || catMemory(d.supplier)) : (catMemory(d.supplier) || d.category || (d.kind !== "other" && rec?.ok ? (rec.result.category || "") : "")));
@@ -761,7 +763,7 @@ $("upReview").addEventListener("submit", async (e) => {
   const date = dateEl().value;
   const month = $("rvMonth").value || (date ? date.slice(0, 7) : ymOf(new Date()));
   const origMonth = date ? date.slice(0, 7) : month;
-  const meta = { kind, date, month, origMonth, late: origMonth !== month && isClosed(origMonth), note: $("rvNote").value.trim() };
+  const meta = { kind, date, month, origMonth, late: origMonth !== month && isClosed(origMonth), note: $("rvNote").value.trim(), details: $("rvDetails").value.trim() };
   if (kind === "invoice") {
     Object.assign(meta, {
       supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), exempt: $("rvExempt").checked,

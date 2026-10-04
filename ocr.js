@@ -18,6 +18,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
   "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
   "category": string,         // for invoices only, one of: "חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר". The business is a medical-cosmetics clinic.
+"details": string,          // short Hebrew summary (max ~70 chars). Invoice: what was bought / which service, e.g. "סרום היאלורוני x12, מסכות אלגינט x20" or "ניקיון חודשי". Salary/money transfer: "הועבר ל<recipient> סך של ₪<amount>" (+ purpose if shown). Bank / credit-card statement: the main payees. Other: what the document is about.
   "note": string              // very short Hebrew note if something important is unclear, else ""
 }
 Rules:
@@ -65,6 +66,7 @@ export function normalizeResult(r) {
     amount: num(r.amount),
     currency: normCur(r.currency),
     category: String(r.category || "").trim(),
+    details: String(r.details || "").replace(/\s+/g, " ").trim().slice(0, 160),
     note: String(r.note || "").trim()
   };
   if (out.currency !== "ILS") { out.vat = 0; out.net = out.total; out.exempt = false; }
