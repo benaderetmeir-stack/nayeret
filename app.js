@@ -1,11 +1,11 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007";
-import { recognize } from "./ocr.js?v=20261007";
-import { getRate, curSign } from "./fx.js?v=20261007";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007c";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007c";
+import { recognize } from "./ocr.js?v=20261007c";
+import { getRate, curSign } from "./fx.js?v=20261007c";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007c";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007c";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007c";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -154,7 +154,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007");
+    const { seedDemo } = await import("./demo.js?v=20261007c");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -469,11 +469,12 @@ function printImages(urls) {
 }
 
 /* ======================= העלאה ואישור ======================= */
-const up = { inboxIds: null, inboxQueue: [], pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
+const up = { runId: 0, inboxIds: null, inboxQueue: [], pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
 
 $("fab").onclick = () => openUpload();
 function showStep(id) { ["upCollect", "upMulti", "upPdfSplit", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
 function openUpload(opts = {}) {
+  up.runId++; up.skipCtl?.abort();
   up.inboxIds = opts.inboxIds || null; if (!opts.inboxIds) up.inboxQueue = [];
   up.pages = opts.pages ? opts.pages.slice() : []; up.queue = []; up.edit = opts.edit || null; up.dupFound = null;
   $("upTitle").textContent = up.edit ? "עריכת פרטי מסמך" : "מסמך חדש";
@@ -481,7 +482,7 @@ function openUpload(opts = {}) {
   else { showStep("upCollect"); $("upStart").hidden = false; $("upPagesBox").hidden = true; $("upBusy").hidden = true; }
   if (!$("uploadDlg").open) $("uploadDlg").showModal();
 }
-$("uploadDlg").addEventListener("close", () => { ["inCamera", "inFile", "inCameraMore", "inFileMore"].forEach((id) => ($(id).value = "")); });
+$("uploadDlg").addEventListener("close", () => { up.runId++; up.skipCtl?.abort(); ["inCamera", "inFile", "inCameraMore", "inFileMore"].forEach((id) => ($(id).value = "")); });
 
 function bindInput(id, more) {
   $(id).addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; if (files.length) handleFiles(files, more); });
@@ -539,13 +540,27 @@ $("upPages").addEventListener("click", (e) => {
   if (!up.pages.length) { $("upPagesBox").hidden = true; $("upStart").hidden = false; } else renderPageStrip();
 });
 $("upDone").onclick = runRecognition;
+$("upSkip").onclick = () => up.skipCtl?.abort();
 
 async function runRecognition() {
+  const runId = ++up.runId;   // זיהוי שהתחיל קודם ונגמר מאוחר לא ידרוס מסמך חדש
   showStep("upCollect"); $("upStart").hidden = true; $("upPagesBox").hidden = true; $("upBusy").hidden = false;
   $("upBusyText").textContent = "מזהה את המסמך…";
   let rec;
   if (state.store.demo && !state.settings.geminiKey) rec = { ok: false, message: "בתצוגה אין זיהוי אוטומטי. באתר האמיתי, אחרי הוספת מפתח, השדות יתמלאו לבד." };
-  else rec = await recognize(up.pages, state.settings);
+  else {
+    // מונה שניות, ואחרי 15 שניות כפתור "דלגי ומלאי ידנית"
+    const ctl = new AbortController(), t0 = Date.now();
+    up.skipCtl = ctl;
+    const tick = setInterval(() => {
+      const s = Math.round((Date.now() - t0) / 1000);
+      $("upBusyText").textContent = `מזהה את המסמך… ${s} שניות`;
+      if (s >= 15) $("upSkipBox").hidden = false;
+    }, 1000);
+    try { rec = await recognize(up.pages, state.settings, ctl.signal); }
+    finally { clearInterval(tick); if (runId === up.runId) { $("upSkipBox").hidden = true; up.skipCtl = null; } }
+  }
+  if (runId !== up.runId || !$("uploadDlg").open) return;   // בינתיים נסגר החלון או התחיל מסמך אחר
   $("upBusy").hidden = true;
   showStep("upReview");
   fillReview(rec.ok ? rec.result : {}, rec);
