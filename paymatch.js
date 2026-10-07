@@ -1,9 +1,15 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261007j";
+import { supplierKey } from "./recur.js?v=20261008";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
 
+// מסמכים שמשלמים עליהם בלי חשבונית (קופות גמל, ביטוח לאומי, מס...)
+export const isPayable = (r) => r.kind === "other" && /קופות גמל|פנסיה|ביטוח לאומי|ביטוח|מס הכנסה|מע"?מ|ניכויים/.test(r.docType || "");
+// תשלום לרשות או לקרן: לא צריך חשבונית
+export const isAuthority = (r) => /ביטוח לאומי|מס הכנסה|רשות המסים|מע"?מ|פנסיה|גמל|השתלמות|מגדל|הראל|מנורה|הפניקס|מיטב|אלטשולר|מור |אנליסט|ילין/.test(`${r.name || ""} ${r.details || ""}`);
+const targetAmount = (t) => Number(t.kind === "invoice" ? t.total : t.amount);
+const targetName = (t) => t.kind === "invoice" ? t.supplier : (t.name || "");
 const MAX_DAYS = 75;
 const days = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
 function nameScore(a, b) {
@@ -14,6 +20,7 @@ function nameScore(a, b) {
 }
 
 // מחזיר Map: מזהה מסמך ← המסמך שהותאם לו (בשני הכיוונים)
+// invoices = חשבוניות וגם מסמכים כמו דוח קופות גמל (isPayable)
 export function matchPayments(invoices, payments, ownName = "") {
   const own = new Set(supplierKey(ownName).split(" ").filter((t) => t.length > 2));
   // השם באישור תשלום יכול להיות של המשלם (העסק שלך) או של הבנק, אז בודקים גם את הפירוט
@@ -22,11 +29,11 @@ export function matchPayments(invoices, payments, ownName = "") {
   for (const p of payments) {
     const amt = Number(p.amount); if (!(amt > 0) || !p.date) continue;
     for (const inv of invoices) {
-      const tot = Number(inv.total); if (!(tot > 0) || !inv.date) continue;
+      const tot = targetAmount(inv); if (!(tot > 0) || !inv.date) continue;
       if (Math.abs(tot - amt) > 1) continue;
       if ((p.notWith || []).includes(inv.id) || (inv.notWith || []).includes(p.id)) continue;   // בוטל ידנית
       const d = days(p.date, inv.date); if (d > MAX_DAYS) continue;
-      const scores = payNames(p).map((n) => nameScore(n, inv.supplier)).filter((x) => x !== null);
+      const scores = payNames(p).map((n) => nameScore(n, targetName(inv))).filter((x) => x !== null);
       const ns = scores.length ? Math.max(...scores) : null;
       const exact = Math.abs(tot - amt) < 0.01;
       if (ns !== null && ns < 0.5 && !(exact && d <= 60)) continue;   // שם אחר: רק סכום מדויק ועד 60 יום

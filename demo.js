@@ -1,5 +1,5 @@
 // נתונים לדוגמה למצב תצוגה בלבד. שמות העסקים בדויים.
-import { makeThumb } from "./images.js?v=20261007j";
+import { makeThumb } from "./images.js?v=20261008";
 
 function receipt({ title, sub, lines, total, vat, no, date, exempt, kind }) {
   const W = 620, H = 860;
@@ -53,6 +53,8 @@ export async function seedDemo(store) {
     { kind: "other", docType: "תעודת משלוח", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 3), amount: null, note: "תואם לחשבונית 20931", month: cur, origMonth: cur, lines: [["סרום היאלורוני", "12 יח'"], ["מסכות אלגינט", "20 יח'"]] },
     { kind: "other", docType: "אישור תשלום", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 6), amount: 2360, note: "", details: "העברה לספק", month: cur, origMonth: cur, lines: [["העברה בנקאית", "2,360.00"]] },
     { kind: "other", docType: "אישור תשלום", name: "רו\"ח כהן ושות'", date: day(cur, 4), amount: 1200, note: "", details: "שכר טרחה", month: cur, origMonth: cur, lines: [["העברה בנקאית", "1,200.00"]] },
+    { kind: "other", docType: "דוח קופות גמל / פנסיה", name: "מגדל מקפת", date: day(cur, 10), amount: 843, note: "", details: "הפקדות לקופות גמל", month: cur, origMonth: cur, lines: [["הפקדות עובד ומעסיק", "843.00"]] },
+    { kind: "other", docType: "אישור תשלום", name: "בנק לדוגמה", date: day(cur, 12), amount: 843, note: "", details: "העברה לקופות גמל", month: cur, origMonth: cur, lines: [["העברה בנקאית", "843.00"]] },
     { kind: "other", docType: "דף בנק", name: "בנק לדוגמה", date: day(prev, 30), amount: null, note: "", month: prev, origMonth: prev, lines: [["יתרת פתיחה", "—"], ["יתרת סגירה", "—"]] }
   ];
   for (const it of items) {

@@ -1,12 +1,12 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007j";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007j";
-import { recognize } from "./ocr.js?v=20261007j";
-import { getRate, curSign } from "./fx.js?v=20261007j";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007j";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007j";
-import { isPayment, matchPayments } from "./paymatch.js?v=20261007j";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007j";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261008";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261008";
+import { recognize } from "./ocr.js?v=20261008";
+import { getRate, curSign } from "./fx.js?v=20261008";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261008";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261008";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261008";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261008";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -157,7 +157,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007j");
+    const { seedDemo } = await import("./demo.js?v=20261008");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -270,11 +270,15 @@ async function loadRows() {
   try {
     if (state.search) {
       const s = state.search;
+      // חיפוש: בחשבוניות ובניירת האחרת יחד
       rows = await state.store.listByRange(s.from || "2000-01-01", s.to || "2999-12-31");
-      rows = rows.filter((r) => r.kind === kind);
       if (s.text) {
         const q = s.text.toLowerCase();
-        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.docType, r.note, r.details].some((v) => String(v || "").toLowerCase().includes(q)));
+        // מספר בחיפוש: מחפש גם בסכומים (843 ימצא 843 וגם 843.50)
+        const qn = /^[\d.,₪\s]+$/.test(s.text) ? parseFloat(s.text.replace(/[₪,\s]/g, "")) : NaN;
+        const amtHit = (v) => v != null && v !== "" && Number.isFinite(qn) && (/[.]/.test(s.text) ? Math.abs(Number(v) - qn) < 0.01 : Math.trunc(Math.abs(Number(v))) === Math.trunc(qn));
+        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.docType, r.note, r.details].some((v) => String(v || "").toLowerCase().includes(q))
+          || [r.total, r.net, r.vat, r.amount, r.origAmount].some(amtHit));
       }
       if (s.amtFrom != null) rows = rows.filter((r) => (amountOf(r) ?? -Infinity) >= s.amtFrom);
       if (s.amtTo != null) rows = rows.filter((r) => (amountOf(r) ?? Infinity) <= s.amtTo);
@@ -293,7 +297,7 @@ async function loadRows() {
 let payReq = 0;
 async function refreshPayMarks(rows) {
   const req = ++payReq;
-  const relevant = rows.filter((r) => r.kind === "invoice" || isPayment(r));
+  const relevant = rows.filter((r) => isTarget(r) || isPayment(r));
   if (!relevant.length) { state.payMatch = new Map(); return; }
   const dates = relevant.map((r) => r.date).filter(Boolean).sort();
   if (!dates.length) return;
@@ -302,29 +306,33 @@ async function refreshPayMarks(rows) {
     const around = await state.store.listByRange(shift(dates[0], -75), shift(dates[dates.length - 1], 75));
     if (req !== payReq) return;
     state.payAround = around;
-    state.payMatch = matchPayments(around.filter((r) => r.kind === "invoice"), around.filter(isPayment), state.settings.businessName || "");
+    state.payMatch = matchPayments(around.filter(isTarget), around.filter(isPayment), state.settings.businessName || "");
     renderTable();
   } catch (e) { console.warn("pay marks", e); }
 }
+const isTarget = (r) => r.kind === "invoice" || isPayable(r);   // משהו שמשלמים עליו
+const targetDesc = (t) => t.kind === "invoice" ? `לחשבונית של ${t.supplier || "הספק"} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.total)}` : `ל${t.docType || "מסמך"}${t.name ? ` (${t.name})` : ""} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.amount)}`;
+const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על ₪${fmtMoney(p.amount)}${p.name ? ` (${p.name})` : ""}`;
 function payMark(r) {
   const m = state.payMatch?.get(r.id);
-  if (r.kind === "invoice") {
+  if (isTarget(r)) {
     const on = !!m || !!r.paid;
-    const title = m ? `שולמה · אישור תשלום מ-${fmtDate(m.date)}` : r.paid ? "סומנה ששולמה (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולמה";
+    const title = m ? `שולם · אישור תשלום מ-${fmtDate(m.date)}` : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
     return `<button type="button" class="pay-mark${on ? " is-on" : ""}" data-pay title="${title}" aria-label="${title}">✓</button>`;
   }
   if (!isPayment(r)) return "";
   if (m || r.hasInvoice) {
-    const title = m ? `יש חשבונית: ${m.supplier || ""} מ-${fmtDate(m.date)}` : "סומן שיש חשבונית (לחיצה מבטלת)";
+    const title = m ? (m.kind === "invoice" ? `יש חשבונית: ${m.supplier || ""} מ-${fmtDate(m.date)}` : `שולם עבור ${m.docType || "מסמך"} מ-${fmtDate(m.date)}`) : "סומן שיש חשבונית (לחיצה מבטלת)";
     return `<button type="button" class="pay-mark is-on" data-pay title="${esc(title)}" aria-label="${esc(title)}">✓</button>`;
   }
+  if (isAuthority(r)) return "";   // תשלום לרשות / לקרן: אין חשבונית
   return `<button type="button" class="pay-mark is-missing" data-pay title="לא נמצאה חשבונית לתשלום הזה · לחיצה מסמנת שיש" aria-label="חסרה חשבונית">חסרה חשבונית</button>`;
 }
 async function togglePay(row) {
   const m = state.payMatch?.get(row.id);
   if (m) {
     // התאמה אוטומטית: אפשר לבטל אם היא שגויה
-    const what = row.kind === "invoice" ? `לאישור התשלום מ-${fmtDate(m.date)} על ₪${fmtMoney(m.amount)}${m.name ? ` (${m.name})` : ""}` : `לחשבונית של ${m.supplier || "הספק"} מ-${fmtDate(m.date)} על ₪${fmtMoney(m.total)}`;
+    const what = isTarget(row) ? paymentDesc(m) : targetDesc(m);
     if (!(await confirmBox(`המערכת התאימה את המסמך הזה ${what}.\nזו התאמה שגויה? אפשר לבטל אותה.`, "בטל את ההתאמה", false))) return;
     const a = [...new Set([...(row.notWith || []), m.id])], b = [...new Set([...(m.notWith || []), row.id])];
     row.notWith = a; m.notWith = b;
@@ -332,13 +340,13 @@ async function togglePay(row) {
     catch (e) { console.error(e); toast("הביטול נכשל, נסי שוב"); }
     return refreshPayMarks(state.rows);
   }
-  const key = row.kind === "invoice" ? "paid" : "hasInvoice";
+  const key = isTarget(row) ? "paid" : "hasInvoice";
   const val = !row[key];
   // היה ביטול של התאמה? להציע להחזיר אותה
   const undone = val ? (row.notWith || []).map((id) => state.payAround?.find((x) => x.id === id)).filter(Boolean) : [];
   if (undone.length) {
     const o = undone[0];
-    const what = o.kind === "invoice" ? `לחשבונית של ${o.supplier || "הספק"} מ-${fmtDate(o.date)} על ₪${fmtMoney(o.total)}` : `לאישור התשלום מ-${fmtDate(o.date)} על ₪${fmtMoney(o.amount)}${o.name ? ` (${o.name})` : ""}`;
+    const what = isTarget(o) ? targetDesc(o) : paymentDesc(o);
     const ans = await confirmBox(`ביטלת בעבר את ההתאמה של המסמך הזה ${what}.\nלהחזיר אותה?`, "כן, להחזיר את ההתאמה", false, "לא, רק לסמן ✓");
     if (ans === null) return;
     if (ans) {
@@ -354,9 +362,16 @@ async function togglePay(row) {
   catch (e) { console.error(e); row[key] = !val; renderTable(); toast("השמירה נכשלה, נסי שוב"); }
 }
 
+const SEARCH_COLS = [
+  { key: "idx", label: "#" }, { key: "thumb", label: "תמונה" }, { key: "date", label: "תאריך" },
+  { key: "kindTag", label: "סוג" }, { key: "who", label: "ספק / שם" }, { key: "invoiceNumber", label: "מס' חשבונית" },
+  { key: "amt", label: "סכום", money: true, strong: true }, { key: "note", label: "הערה" }
+];
+const kindTag = (r) => r.kind === "invoice" ? `<span class="kind-tag kind-inv">חשבונית</span>` : `<span class="kind-tag kind-oth">ניירת אחרת</span>${r.docType ? `<small class="kind-sub">${esc(r.docType)}</small>` : ""}`;
 function renderTable() {
-  const kind = state.view, cols = COLS[kind], rows = state.rows;
-  const thClass = { idx: "th-num", thumb: "th-img", date: "th-date", supplier: "th-name", name: "th-name", invoiceNumber: "th-invno", net: "th-net", vat: "th-vat", total: "th-total", docType: "th-type", note: "th-note", amount: "th-amount" };
+  const kind = state.view, rows = state.rows, mixed = !!state.search;
+  const cols = mixed ? SEARCH_COLS : COLS[kind];
+  const thClass = { kindTag: "th-type", who: "th-name", amt: "th-total", idx: "th-num", thumb: "th-img", date: "th-date", supplier: "th-name", name: "th-name", invoiceNumber: "th-invno", net: "th-net", vat: "th-vat", total: "th-total", docType: "th-type", note: "th-note", amount: "th-amount" };
   const allSel = rows.length && rows.every((r) => state.selected.has(r.id));
   $("docThead").innerHTML = `<tr><th class="th-num col-sel"><input type="checkbox" id="selAll" aria-label="בחר הכול" ${allSel ? "checked" : ""}></th>` +
     cols.map((c) => `<th class="${thClass[c.key]}${c.money ? " num" : ""}">${esc(c.label)}</th>`).join("") + `<th class="th-act" aria-label="פעולות"></th></tr>`;
@@ -368,27 +383,31 @@ function renderTable() {
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
       if (c.key === "note") return `<td class="note-cell">${payMark(r)}${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
+      if (c.key === "kindTag") return `<td>${kindTag(r)}</td>`;
+      if (c.key === "who") return `<td class="name-cell">${esc(r.kind === "invoice" ? r.supplier : r.name)}</td>`;
+      if (c.key === "amt") { const k = r.kind === "invoice" ? "total" : "amount", o = fxOrig(r, k); return `<td class="num total-cell">${esc(cellText(r, k))}${o ? `<small class="fx-orig">${esc(o)}</small>` : ""}</td>`; }
       const orig = fxOrig(r, c.key);
       return `<td class="${c.money ? "num" : ""}${c.strong ? " total-cell" : ""}">${esc(cellText(r, c.key))}${orig ? `<small class="fx-orig">${esc(orig)}</small>` : ""}</td>`;
     }).join("")}
     <td><button class="row-btn" data-del aria-label="מחיקת שורה" title="מחיקה">🗑</button></td></tr>`).join("");
 
-  $("docTfoot").innerHTML = rows.length ? `<tr><td></td>${cols.map((c, i) => c.sum ? `<td class="num${c.strong ? " total-cell" : ""}">${fmtMoney(sumOf(rows, c.key))}</td>` : `<td>${i === 2 ? 'סה"כ' : i === 3 ? `${rows.length} מסמכים` : ""}</td>`).join("")}<td></td></tr>` : "";
+  if (mixed) $("docTfoot").innerHTML = rows.length ? `<tr><td></td><td colspan="${cols.length}">נמצאו ${rows.length} מסמכים · ${rows.filter((r) => r.kind === "invoice").length} חשבוניות · ${rows.filter((r) => r.kind !== "invoice").length} ניירת אחרת</td><td></td></tr>` : "";
+  else $("docTfoot").innerHTML = rows.length ? `<tr><td></td>${cols.map((c, i) => c.sum ? `<td class="num${c.strong ? " total-cell" : ""}">${fmtMoney(sumOf(rows, c.key))}</td>` : `<td>${i === 2 ? 'סה"כ' : i === 3 ? `${rows.length} מסמכים` : ""}</td>`).join("")}<td></td></tr>` : "";
 
   const emptyText = state.search ? "לא נמצאו מסמכים שמתאימים לחיפוש" : `אין ${kind === "invoice" ? "חשבוניות" : "ניירת"} בתיקיית ${monthName(state.month)}`;
   $("emptyState").hidden = rows.length > 0; $("emptyText").textContent = emptyText;
   $("docTable").hidden = rows.length === 0;
 
   // כרטיסים לטלפון
-  const sums = cols.filter((c) => c.sum);
+  const sums = mixed ? [] : cols.filter((c) => c.sum);
   $("docCards").innerHTML = (rows.length ? `<div class="card-summary">${sums.map((c) => `<div><span>${esc(c.label)}</span><strong>${fmtMoney(sumOf(rows, c.key))}</strong></div>`).join("")}<div><span>מסמכים</span><strong>${rows.length}</strong></div></div>` : `<div class="empty"><p>${esc(emptyText)}</p></div>`) +
     rows.map((r, i) => `<div class="card ${state.selected.has(r.id) ? "is-selected" : ""}" data-id="${r.id}">
       <button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button>
       <div class="card-main" data-open>
-        <div class="card-title">${i + 1}. ${esc(kind === "invoice" ? r.supplier : `${r.docType || ""}${r.name ? " · " + r.name : ""}`)}</div>
-        <div class="card-sub">${payMark(r)}<span>${fmtDate(r.date)}</span>${kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
+        <div class="card-title">${i + 1}. ${esc(r.kind === "invoice" ? r.supplier : `${r.docType || ""}${r.name ? " · " + r.name : ""}`)}</div>
+        <div class="card-sub">${mixed ? kindTag(r).replace(/<small[^>]*>.*<\/small>/, "") : ""}${payMark(r)}<span>${fmtDate(r.date)}</span>${r.kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
       </div>
-      <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${fxOrig(r, kind === "invoice" ? "total" : "amount") ? `<small class="fx-orig">${esc(fxOrig(r, kind === "invoice" ? "total" : "amount"))}</small>` : ""}${kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
+      <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${fxOrig(r, r.kind === "invoice" ? "total" : "amount") ? `<small class="fx-orig">${esc(fxOrig(r, r.kind === "invoice" ? "total" : "amount"))}</small>` : ""}${r.kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
         <label class="check" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" class="rowSel" ${state.selected.has(r.id) ? "checked" : ""} aria-label="בחירה"></label></div>
     </div>`).join("");
   renderSelection();
@@ -436,9 +455,10 @@ async function deleteMany(rows, onProgress) {
 }
 $("selMakeFile").onclick = async () => {
   const rows = state.rows.filter((r) => state.selected.has(r.id));
-  const kind = state.view;
+  // מתוצאות חיפוש יכולים להיבחר שני הסוגים: קובץ לכל סוג
+  const sections = ["invoice", "other"].map((kind) => ({ kind, rows: rows.filter((r) => r.kind === kind) })).filter((x) => x.rows.length);
   setView("reports");
-  await generate([{ kind, rows }], { period: `${rows.length} מסמכים שנבחרו`, fileTag: "נבחרים", outputs: { combined: true, table: false, docs: false, excel: true } });
+  await generate(sections, { period: `${rows.length} מסמכים שנבחרו`, fileTag: "נבחרים", outputs: { combined: true, table: false, docs: false, excel: true } });
 };
 
 async function deleteRow(row) {
@@ -471,7 +491,7 @@ function runSearch(force) {
   if (from || to) parts.push(`תאריכים ${from ? fmtDate(from) : "…"} עד ${to ? fmtDate(to) : "…"}`);
   if (amtFrom != null || amtTo != null) parts.push(`סכום ${amtFrom ?? "…"} עד ${amtTo ?? "…"} ₪`);
   const st = $("searchState"); st.hidden = false;
-  st.innerHTML = `<span>חיפוש בכל החודשים: ${esc(parts.join(" · "))}</span><button type="button" id="searchBack">חזרה לתיקיית החודש</button>`;
+  st.innerHTML = `<span>חיפוש בכל החודשים, בחשבוניות ובניירת אחרת: ${esc(parts.join(" · "))}</span><button type="button" id="searchBack">חזרה לתיקיית החודש</button>`;
   $("searchBack").onclick = () => $("searchClear").click();
   state.selected.clear();
   loadRows();
