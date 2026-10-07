@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261007h";
+import { supplierKey } from "./recur.js?v=20261007j";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
@@ -24,6 +24,7 @@ export function matchPayments(invoices, payments, ownName = "") {
     for (const inv of invoices) {
       const tot = Number(inv.total); if (!(tot > 0) || !inv.date) continue;
       if (Math.abs(tot - amt) > 1) continue;
+      if ((p.notWith || []).includes(inv.id) || (inv.notWith || []).includes(p.id)) continue;   // בוטל ידנית
       const d = days(p.date, inv.date); if (d > MAX_DAYS) continue;
       const scores = payNames(p).map((n) => nameScore(n, inv.supplier)).filter((x) => x !== null);
       const ns = scores.length ? Math.max(...scores) : null;

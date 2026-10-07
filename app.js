@@ -1,12 +1,12 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007h";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007h";
-import { recognize } from "./ocr.js?v=20261007h";
-import { getRate, curSign } from "./fx.js?v=20261007h";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007h";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007h";
-import { isPayment, matchPayments } from "./paymatch.js?v=20261007h";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007h";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007j";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007j";
+import { recognize } from "./ocr.js?v=20261007j";
+import { getRate, curSign } from "./fx.js?v=20261007j";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007j";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007j";
+import { isPayment, matchPayments } from "./paymatch.js?v=20261007j";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007j";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -134,13 +134,15 @@ const numVal = (el) => el.value === "" ? null : r2(parseFloat(el.value));
 let toastT;
 function toast(msg, ms = 2600) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms); }
 
-function confirmBox(text, yes = "כן", danger = true) {
+// מחזיר true / false (כפתור "לא"), או null אם נסגר בלי בחירה
+function confirmBox(text, yes = "כן", danger = true, no = "ביטול") {
   return new Promise((res) => {
     const d = $("confirmDlg"); $("cfText").textContent = text;
     const y = $("cfYes"); y.textContent = yes; y.className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    $("cfNo").textContent = no;
     const done = (v) => { d.close(); y.onclick = $("cfNo").onclick = null; res(v); };
     y.onclick = () => done(true); $("cfNo").onclick = () => done(false);
-    d.oncancel = (e) => { e.preventDefault(); done(false); };
+    d.oncancel = (e) => { e.preventDefault(); done(null); };
     d.showModal();
   });
 }
@@ -155,7 +157,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007h");
+    const { seedDemo } = await import("./demo.js?v=20261007j");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -299,6 +301,7 @@ async function refreshPayMarks(rows) {
   try {
     const around = await state.store.listByRange(shift(dates[0], -75), shift(dates[dates.length - 1], 75));
     if (req !== payReq) return;
+    state.payAround = around;
     state.payMatch = matchPayments(around.filter((r) => r.kind === "invoice"), around.filter(isPayment), state.settings.businessName || "");
     renderTable();
   } catch (e) { console.warn("pay marks", e); }
@@ -319,9 +322,33 @@ function payMark(r) {
 }
 async function togglePay(row) {
   const m = state.payMatch?.get(row.id);
-  if (m) return toast(row.kind === "invoice" ? `מסומן לבד: יש אישור תשלום מ-${fmtDate(m.date)}` : `מסומן לבד: יש חשבונית של ${m.supplier || "הספק"} מ-${fmtDate(m.date)}`, 3500);
+  if (m) {
+    // התאמה אוטומטית: אפשר לבטל אם היא שגויה
+    const what = row.kind === "invoice" ? `לאישור התשלום מ-${fmtDate(m.date)} על ₪${fmtMoney(m.amount)}${m.name ? ` (${m.name})` : ""}` : `לחשבונית של ${m.supplier || "הספק"} מ-${fmtDate(m.date)} על ₪${fmtMoney(m.total)}`;
+    if (!(await confirmBox(`המערכת התאימה את המסמך הזה ${what}.\nזו התאמה שגויה? אפשר לבטל אותה.`, "בטל את ההתאמה", false))) return;
+    const a = [...new Set([...(row.notWith || []), m.id])], b = [...new Set([...(m.notWith || []), row.id])];
+    row.notWith = a; m.notWith = b;
+    try { await Promise.all([state.store.updateDoc(row.id, { notWith: a }), state.store.updateDoc(m.id, { notWith: b })]); toast("ההתאמה בוטלה"); }
+    catch (e) { console.error(e); toast("הביטול נכשל, נסי שוב"); }
+    return refreshPayMarks(state.rows);
+  }
   const key = row.kind === "invoice" ? "paid" : "hasInvoice";
   const val = !row[key];
+  // היה ביטול של התאמה? להציע להחזיר אותה
+  const undone = val ? (row.notWith || []).map((id) => state.payAround?.find((x) => x.id === id)).filter(Boolean) : [];
+  if (undone.length) {
+    const o = undone[0];
+    const what = o.kind === "invoice" ? `לחשבונית של ${o.supplier || "הספק"} מ-${fmtDate(o.date)} על ₪${fmtMoney(o.total)}` : `לאישור התשלום מ-${fmtDate(o.date)} על ₪${fmtMoney(o.amount)}${o.name ? ` (${o.name})` : ""}`;
+    const ans = await confirmBox(`ביטלת בעבר את ההתאמה של המסמך הזה ${what}.\nלהחזיר אותה?`, "כן, להחזיר את ההתאמה", false, "לא, רק לסמן ✓");
+    if (ans === null) return;
+    if (ans) {
+      const a = row.notWith.filter((x) => x !== o.id), b = (o.notWith || []).filter((x) => x !== row.id);
+      row.notWith = a; o.notWith = b;
+      try { await Promise.all([state.store.updateDoc(row.id, { notWith: a }), state.store.updateDoc(o.id, { notWith: b })]); toast("ההתאמה הוחזרה"); }
+      catch (e) { console.error(e); toast("השמירה נכשלה, נסי שוב"); }
+      return refreshPayMarks(state.rows);
+    }
+  }
   row[key] = val; renderTable();
   try { await state.store.updateDoc(row.id, { [key]: val }); }
   catch (e) { console.error(e); row[key] = !val; renderTable(); toast("השמירה נכשלה, נסי שוב"); }
