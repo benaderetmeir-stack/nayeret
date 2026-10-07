@@ -1,11 +1,11 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261004b";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261004b";
-import { recognize } from "./ocr.js?v=20261004b";
-import { getRate, curSign } from "./fx.js?v=20261004b";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261004b";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261004b";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261004b";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007";
+import { recognize } from "./ocr.js?v=20261007";
+import { getRate, curSign } from "./fx.js?v=20261007";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -154,7 +154,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261004b");
+    const { seedDemo } = await import("./demo.js?v=20261007");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -472,7 +472,7 @@ function printImages(urls) {
 const up = { inboxIds: null, inboxQueue: [], pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
 
 $("fab").onclick = () => openUpload();
-function showStep(id) { ["upCollect", "upMulti", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
+function showStep(id) { ["upCollect", "upMulti", "upPdfSplit", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
 function openUpload(opts = {}) {
   up.inboxIds = opts.inboxIds || null; if (!opts.inboxIds) up.inboxQueue = [];
   up.pages = opts.pages ? opts.pages.slice() : []; up.queue = []; up.edit = opts.edit || null; up.dupFound = null;
@@ -501,6 +501,7 @@ $("upMultiSame").onclick = () => { showStep("upCollect"); addFiles(up.pendingFil
 $("upMultiSep").onclick = () => { up.queue = up.pendingFiles.slice(1); showStep("upCollect"); addFiles([up.pendingFiles[0]], true); };
 
 async function addFiles(files, directToReview = false) {
+  const startLen = up.pages.length;
   $("upStart").hidden = true; $("upPagesBox").hidden = true; $("upBusy").hidden = false;
   try {
     for (const f of files) {
@@ -511,9 +512,23 @@ async function addFiles(files, directToReview = false) {
   } catch (e) { console.error(e); toast(e.message || "לא הצלחתי לקרוא את הקובץ", 4000); }
   $("upBusy").hidden = true;
   if (!up.pages.length) { $("upStart").hidden = false; return; }
+  // PDF אחד עם כמה דפים: לשאול אם זה מסמך אחד או כל דף בנפרד (ברירת המחדל: מסמך אחד)
+  if (startLen === 0 && files.length === 1 && isPdf(files[0]) && up.pages.length > 1) {
+    up.splitDirect = directToReview;
+    $("upPdfSplitQ").textContent = `בקובץ יש ${up.pages.length} דפים. מה הם?`;
+    showStep("upPdfSplit"); setTimeout(() => $("upPdfOne").focus(), 30);
+    return;
+  }
   if (directToReview) return runRecognition();
   renderPageStrip();
 }
+$("upPdfOne").onclick = () => { showStep("upCollect"); if (up.splitDirect) runRecognition(); else renderPageStrip(); };
+$("upPdfEach").onclick = () => {
+  up.queue = [...up.pages.slice(1).map((p) => ({ pages: [p] })), ...up.queue];
+  up.pages = [up.pages[0]];
+  $("upTitle").textContent = `מסמך חדש (נשארו ${up.queue.length + 1})`;
+  runRecognition();
+};
 function renderPageStrip() {
   $("upPagesBox").hidden = false;
   $("upPages").innerHTML = up.pages.map((p, i) => `<li><img src="${p}" alt="דף ${i + 1}"><span class="pg-num">${i + 1}</span><button type="button" class="pg-del" data-i="${i}" aria-label="הסרת דף">✕</button></li>`).join("");
@@ -849,6 +864,7 @@ function nextInQueue() {
   up.pages = []; up.edit = null; up.dupFound = null;
   $("upTitle").textContent = `מסמך חדש (נשארו ${up.queue.length + 1})`;
   showStep("upCollect");
+  if (f.pages) { up.pages = f.pages.slice(); return runRecognition(); }   // דף מתוך PDF שפוצל
   addFiles([f], true);
 }
 

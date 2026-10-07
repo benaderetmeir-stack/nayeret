@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Rubik:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261004b">
+<link rel="stylesheet" href="style.css?v=20261007">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230FA3B1'/%3E%3Cpath d='M20 14h18l8 8v28H20z' fill='%23fff'/%3E%3Cpath d='M26 32h14M26 38h14M26 44h9' stroke='%230E6A8C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -285,6 +285,16 @@
     </div>
   </div>
 
+  <!-- שלב 1ג: PDF עם כמה דפים -->
+  <div class="up-step" id="upPdfSplit" hidden>
+    <p class="ask-q" id="upPdfSplitQ">בקובץ יש כמה דפים. מה הם?</p>
+    <div class="row-actions">
+      <button class="btn btn-primary" id="upPdfOne">מסמך אחד</button>
+      <button class="btn btn-ghost" id="upPdfEach">כל דף מסמך נפרד</button>
+    </div>
+    <p class="hint">למשל: חשבונית של כמה דפים = מסמך אחד. קובץ עם כמה תלושי שכר = כל דף מסמך נפרד.</p>
+  </div>
+
   <!-- שלב 2: אישור פרטים -->
   <form class="up-step up-review" id="upReview" hidden>
     <div class="review-img">
@@ -440,6 +450,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=20261004b"></script>
+<script type="module" src="app.js?v=20261007"></script>
 </body>
 </html>
