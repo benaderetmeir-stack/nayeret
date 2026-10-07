@@ -438,3 +438,10 @@ button, input, select { font: inherit; color: inherit; }
 .recur-list li.is-muted { opacity: .55; }
 .recur-list .rl-freq { font-size: 13px; color: var(--ink-2); }
 #cfText { white-space: pre-line; }
+
+/* סימון קטן: שולמה / יש חשבונית */
+.pay-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-inline-end: 6px; padding: 0; border-radius: 50%; border: 1.5px solid #C9D6DD; background: #fff; color: transparent; font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer; vertical-align: middle; }
+.pay-mark:hover { border-color: #3BB273; color: #3BB273; }
+.pay-mark.is-on { background: #3BB273; border-color: #3BB273; color: #fff; }
+.pay-mark.is-missing { width: auto; height: auto; padding: 1px 7px; border-radius: 10px; border-color: #F0B07A; background: #FFF4EA; color: #B4590F; font-size: 11px; font-weight: 600; }
+.card-sub .pay-mark { margin: 0; }
