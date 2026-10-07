@@ -1,11 +1,11 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007d";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007d";
-import { recognize } from "./ocr.js?v=20261007d";
-import { getRate, curSign } from "./fx.js?v=20261007d";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007d";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007d";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007d";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007e";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007e";
+import { recognize } from "./ocr.js?v=20261007e";
+import { getRate, curSign } from "./fx.js?v=20261007e";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007e";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007e";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007e";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -154,7 +154,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007d");
+    const { seedDemo } = await import("./demo.js?v=20261007e");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());

@@ -10,7 +10,8 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "supplier": string,         // for invoices/receipts: issuing business name as printed
   "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
-  "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable
+  "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable. If the document shows only a month and year (e.g. a payslip for "09/26" or "ספטמבר 2026"), give the 1st of that month and set monthOnly true
+  "monthOnly": boolean,       // true when the document has only month+year without a specific day
   "currency": string,         // ISO code of the amounts as printed: "ILS" (₪, ש"ח, NIS), "USD" ($), "EUR" (€), "GBP" (£)...
   "total": number | null,     // total including VAT, in the document's currency
   "vat": number | null,       // VAT amount
@@ -28,7 +29,7 @@ Rules:
 - A pension / provident fund report (דוח קופות גמל, פנסיה, קרן השתלמות, הפרשות מעסיק) is "דוח קופות גמל / פנסיה", NOT a payslip. A payslip (תלוש שכר) is for one employee for one month with gross/net salary.
 - "other" = payslips, bank statements, salary transfers, delivery notes without payment, payment confirmations and anything else.
 - Numbers as plain numbers without currency signs or thousands separators. Credit notes (זיכוי) as negative totals.
-- Dates in Israel are written day/month/year.
+- Dates in Israel are written day/month/year. A payslip is for a pay period month: if no exact day is printed, use monthOnly.
 - Never invent values; use "" or null when unsure.`;
 
 function num(v) {
@@ -50,11 +51,16 @@ function isoDate(v) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
   if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  const mo = s.match(/^(\d{1,2})[./-](\d{2}|\d{4})$/);   // "09/26" = חודש/שנה
+  if (mo) { const y = mo[2].length === 2 ? "20" + mo[2] : mo[2]; return lastDay(`${y}-${mo[1].padStart(2, "0")}-01`); }
   return "";
 }
 
+const lastDay = (iso) => { const [y, m] = iso.split("-").map(Number); return `${iso.slice(0, 7)}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`; };
 export function normalizeResult(r) {
   r = r || {};
+  // מסמך עם חודש ושנה בלבד (למשל תלוש "09/26"): תמיד היום האחרון של החודש, כדי שיהיה אחיד
+  if (r.monthOnly && r.date) { const d = isoDate(r.date); if (d) r.date = lastDay(d); }
   const out = {
     kind: r.kind === "other" ? "other" : "invoice",
     docType: String(r.docType || "").trim(),
