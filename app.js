@@ -1,12 +1,12 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261008";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261008";
-import { recognize } from "./ocr.js?v=20261008";
-import { getRate, curSign } from "./fx.js?v=20261008";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261008";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261008";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261008";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261008";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261008b";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261008b";
+import { recognize } from "./ocr.js?v=20261008b";
+import { getRate, curSign } from "./fx.js?v=20261008b";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261008b";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261008b";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261008b";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261008b";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -157,7 +157,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261008");
+    const { seedDemo } = await import("./demo.js?v=20261008b");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -1429,3 +1429,23 @@ $("sSave").onclick = async () => {
 $("sLogout").onclick = () => state.store.signOut();
 
 boot();
+
+// ===== עדכון אוטומטי: אם עלתה גרסה חדשה לאתר, הדף נטען מחדש לבד =====
+const MY_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
+let lastCheck = 0;
+async function checkForUpdate() {
+  if (!MY_VERSION || Date.now() - lastCheck < 60000) return;
+  lastCheck = Date.now();
+  try {
+    // cache: "reload" מביא את הדף מהשרת ומעדכן גם את הזיכרון של הדפדפן
+    const html = await (await fetch("./index.html", { cache: "reload" })).text();
+    const v = (html.match(/app\.js\?v=([\w.-]+)/) || [])[1];
+    if (v && v !== MY_VERSION && !document.querySelector("dialog[open]")) {
+      // שמירה מלולאה: לא יותר מטעינה אחת לאותה גרסה
+      let done = ""; try { done = sessionStorage.getItem("nayeretReloadedTo") || ""; sessionStorage.setItem("nayeretReloadedTo", v); } catch {}
+      if (done !== v) location.reload();
+    }
+  } catch { /* בלי רשת: בפעם הבאה */ }
+}
+setTimeout(checkForUpdate, 3000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });

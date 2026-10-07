@@ -1,5 +1,5 @@
 // הפקת קבצים: טבלה ב-PDF, קובץ מסמכים ב-PDF, אקסל, ושיתוף
-import { loadImage } from "./images.js?v=20261008";
+import { loadImage } from "./images.js?v=20261008b";
 
 export const COLS = {
   invoice: [

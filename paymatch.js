@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261008";
+import { supplierKey } from "./recur.js?v=20261008b";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
