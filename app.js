@@ -1,11 +1,11 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007c";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007c";
-import { recognize } from "./ocr.js?v=20261007c";
-import { getRate, curSign } from "./fx.js?v=20261007c";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007c";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007c";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007c";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007d";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007d";
+import { recognize } from "./ocr.js?v=20261007d";
+import { getRate, curSign } from "./fx.js?v=20261007d";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007d";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007d";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007d";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -154,7 +154,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007c");
+    const { seedDemo } = await import("./demo.js?v=20261007d");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -474,7 +474,7 @@ const up = { runId: 0, inboxIds: null, inboxQueue: [], pages: [], queue: [], edi
 $("fab").onclick = () => openUpload();
 function showStep(id) { ["upCollect", "upMulti", "upPdfSplit", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
 function openUpload(opts = {}) {
-  up.runId++; up.skipCtl?.abort();
+  up.runId++; up.skipCtl?.abort(); up.batch = null; renderBatchNav();
   up.inboxIds = opts.inboxIds || null; if (!opts.inboxIds) up.inboxQueue = [];
   up.pages = opts.pages ? opts.pages.slice() : []; up.queue = []; up.edit = opts.edit || null; up.dupFound = null;
   $("upTitle").textContent = up.edit ? "עריכת פרטי מסמך" : "מסמך חדש";
@@ -499,7 +499,18 @@ function handleFiles(files, more) {
   addFiles(files);
 }
 $("upMultiSame").onclick = () => { showStep("upCollect"); addFiles(up.pendingFiles); };
-$("upMultiSep").onclick = () => { up.queue = up.pendingFiles.slice(1); showStep("upCollect"); addFiles([up.pendingFiles[0]], true); };
+$("upMultiSep").onclick = async () => {
+  const files = up.pendingFiles, groups = [];
+  showStep("upCollect"); $("upStart").hidden = true; $("upPagesBox").hidden = true; $("upBusy").hidden = false;
+  for (let k = 0; k < files.length; k++) {
+    $("upBusyText").textContent = `קורא קובץ ${k + 1} מתוך ${files.length}…`;
+    try { const pages = await fileToPages(files[k]); if (pages.length) groups.push(pages); }
+    catch (e) { console.error(e); toast(`לא הצלחתי לקרוא את ${files[k].name}`, 4000); }
+  }
+  if (!groups.length) { $("upBusy").hidden = true; $("upStart").hidden = false; return; }
+  if (groups.length === 1) { up.pages = groups[0]; $("upBusy").hidden = true; return runRecognition(); }
+  startBatch(groups);
+};
 
 async function addFiles(files, directToReview = false) {
   const startLen = up.pages.length;
@@ -524,12 +535,7 @@ async function addFiles(files, directToReview = false) {
   renderPageStrip();
 }
 $("upPdfOne").onclick = () => { showStep("upCollect"); if (up.splitDirect) runRecognition(); else renderPageStrip(); };
-$("upPdfEach").onclick = () => {
-  up.queue = [...up.pages.slice(1).map((p) => ({ pages: [p] })), ...up.queue];
-  up.pages = [up.pages[0]];
-  $("upTitle").textContent = `מסמך חדש (נשארו ${up.queue.length + 1})`;
-  runRecognition();
-};
+$("upPdfEach").onclick = () => startBatch(up.pages.map((p) => [p]));
 function renderPageStrip() {
   $("upPagesBox").hidden = false;
   $("upPages").innerHTML = up.pages.map((p, i) => `<li><img src="${p}" alt="דף ${i + 1}"><span class="pg-num">${i + 1}</span><button type="button" class="pg-del" data-i="${i}" aria-label="הסרת דף">✕</button></li>`).join("");
@@ -807,12 +813,13 @@ function checkDup() {
 
 $("rvCancel").onclick = async () => {
   up.inboxQueue = [];
+  if (up.batch) { const left = batchLive().length; if (left > 1 && !(await confirmBox(`לבטל את כל ${left} המסמכים בלי לשמור?`, "בטל הכול"))) return; $("uploadDlg").close(); return; }
   if (up.queue.length && !(await confirmBox(`לבטל גם את ${up.queue.length} הקבצים שנשארו בתור?`, "בטל הכול"))) { return nextInQueue(); }
   $("uploadDlg").close();
 };
 
-$("upReview").addEventListener("submit", async (e) => {
-  e.preventDefault();
+// קורא את הטופס ובודק אותו. מחזיר את פרטי המסמך, או null אם חסר משהו (ואז מסמן את השדה)
+function collectMeta() {
   const kind = curKind();
   const date = dateEl().value;
   const month = $("rvMonth").value || (date ? date.slice(0, 7) : ymOf(new Date()));
@@ -824,10 +831,6 @@ $("upReview").addEventListener("submit", async (e) => {
       total: numVal($("rvTotal")), vat: $("rvExempt").checked ? 0 : numVal($("rvVat")), net: numVal($("rvNet")),
       docType: "", name: "", amount: null, category: currentCat(), items: up.items || []
     });
-    if (meta.category && !catList().includes(meta.category)) {
-      state.settings.customCats = [...(state.settings.customCats || []), meta.category].slice(-20);
-      state.store.saveSettings({ customCats: state.settings.customCats }).catch(() => {});
-    }
     if (meta.net == null && meta.total != null && meta.vat != null) meta.net = r2(meta.total - meta.vat);
     if (!meta.supplier) return fieldError("rvSupplier", "חסר שם ספק");
     if (!date) return fieldError("rvDateI", "חסר תאריך");
@@ -835,11 +838,6 @@ $("upReview").addEventListener("submit", async (e) => {
   } else {
     Object.assign(meta, { docType: currentDocType(), name: $("rvName").value.trim(), amount: numVal($("rvAmount")), supplier: "", invoiceNumber: "", total: null, vat: null, net: null, exempt: false });
     if (!meta.docType) return fieldError($("rvDocTypeSel").value === OTHER ? "rvDocType" : "rvDocTypeSel", "חסר סוג מסמך");
-    if (!docTypeList().includes(meta.docType)) {
-      const custom = [...(state.settings.customDocTypes || []), meta.docType].slice(-30);
-      state.settings.customDocTypes = custom;
-      state.store.saveSettings({ customDocTypes: custom }).catch(() => {});
-    }
     if (!date) return fieldError("rvDateO", "חסר תאריך");
   }
   if (fx.on) {
@@ -847,12 +845,32 @@ $("upReview").addEventListener("submit", async (e) => {
     if (orig == null || !rate) return fieldError(orig == null ? "rvFxOrig" : "rvFxRate", "חסר סכום במקור או שער");
     Object.assign(meta, { currency: $("rvFxCur").value, origAmount: orig, fxRate: rate, fxDate: fx.date || date });
   } else Object.assign(meta, { currency: "ILS", origAmount: null, fxRate: null, fxDate: "" });
+  return meta;
+}
+// קטגוריה / סוג מסמך חדשים נשמרים לרשימה, וזיכרון ספקים ומחירים מתעדכן
+function rememberMeta(meta) {
+  if (meta.kind === "invoice" && meta.category && !catList().includes(meta.category)) {
+    state.settings.customCats = [...(state.settings.customCats || []), meta.category].slice(-20);
+    state.store.saveSettings({ customCats: state.settings.customCats }).catch(() => {});
+  }
+  if (meta.kind === "other" && meta.docType && !docTypeList().includes(meta.docType)) {
+    state.settings.customDocTypes = [...(state.settings.customDocTypes || []), meta.docType].slice(-30);
+    state.store.saveSettings({ customDocTypes: state.settings.customDocTypes }).catch(() => {});
+  }
+  noteSupplier(meta);
+  notePrices(meta);
+}
+
+$("upReview").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (up.batch) return saveBatch();
+  const meta = collectMeta(); if (!meta) return;
+  const { kind, month } = meta;
   if (up.dupFound && !(await confirmBox("נראה שהחשבונית הזו כבר שמורה במערכת (אותו מספר ואותו סכום). לשמור בכל זאת?", "שמור בכל זאת", false))) return;
 
   const btn = $("rvSave"); btn.disabled = true; btn.textContent = "שומר…";
   try {
-    noteSupplier(meta);
-    notePrices(meta);
+    rememberMeta(meta);
     if (up.edit) {
       await state.store.updateDoc(up.edit.id, meta);
       toast("הפרטים עודכנו");
@@ -871,9 +889,9 @@ $("upReview").addEventListener("submit", async (e) => {
   } catch (err) {
     console.error(err);
     toast("השמירה נכשלה. בדקי חיבור ונסי שוב.", 4000);
-  } finally { btn.disabled = false; btn.textContent = "אישור ושמירה"; }
+  } finally { btn.disabled = false; btn.textContent = up.batch ? batchSaveLabel() : "אישור ושמירה"; }
 });
-function fieldError(id, msg) { toast(msg); $(id).focus(); }
+function fieldError(id, msg) { toast(msg); $(id).focus(); return null; }
 function nextInQueue() {
   const f = up.queue.shift();
   up.pages = []; up.edit = null; up.dupFound = null;
@@ -881,6 +899,127 @@ function nextInQueue() {
   showStep("upCollect");
   if (f.pages) { up.pages = f.pages.slice(); return runRecognition(); }   // דף מתוך PDF שפוצל
   addFiles([f], true);
+}
+
+
+/* ======================= כמה מסמכים ביחד: מזהים את כולם, מדפדפים ומאשרים הכול ======================= */
+const SNAP_HIDDEN = ["rvInvoiceFields", "rvOtherFields", "rvCatOtherBox", "rvDocTypeOtherBox", "rvFx", "rvFxLinkRow", "rvMonthHint", "rvRecog", "rvDup", "rvPriceAlert"];
+const SNAP_HTML = ["rvRecog", "rvDup", "rvPriceAlert", "rvMonthHint", "rvFxHint", "rvFxTitle", "rvCat", "rvDocTypeSel"];
+function snapForm() {
+  const els = [...$("upReview").querySelectorAll("input, select")];
+  const html = Object.fromEntries(SNAP_HTML.map((id) => [id, $(id).innerHTML]));
+  return {
+    html, vals: els.map((e) => (e.type === "checkbox" || e.type === "radio") ? e.checked : e.value),
+    hid: SNAP_HIDDEN.map((id) => $(id).hidden),
+    up: { items: up.items, src: up.src, manualMonth: up.manualMonth, dupFound: up.dupFound },
+    fx: { ...fx }, catTouched
+  };
+}
+function restoreForm(sn) {
+  SNAP_HTML.forEach((id) => ($(id).innerHTML = sn.html[id]));
+  [...$("upReview").querySelectorAll("input, select")].forEach((e, i) => { if (e.type === "checkbox" || e.type === "radio") e.checked = sn.vals[i]; else e.value = sn.vals[i]; });
+  SNAP_HIDDEN.forEach((id, i) => ($(id).hidden = sn.hid[i]));
+  Object.assign(up, sn.up); Object.assign(fx, sn.fx); catTouched = sn.catTouched;
+}
+const batchLive = () => up.batch.drafts.filter((d) => !d.drop && !d.saved);
+const batchSaveLabel = () => { const n = batchLive().length; return n > 1 ? `אישור ושמירה של כל ה-${n}` : "אישור ושמירה"; };
+
+async function startBatch(groups) {
+  const runId = ++up.runId;
+  up.queue = []; up.edit = null;
+  up.batch = { drafts: groups.map((pages) => ({ pages })), i: -1 };
+  const drafts = up.batch.drafts, n = drafts.length;
+  showStep("upCollect"); $("upStart").hidden = true; $("upPagesBox").hidden = true; $("upBusy").hidden = false;
+  $("upTitle").textContent = `${n} מסמכים חדשים`;
+  const ctl = new AbortController(), t0 = Date.now(); up.skipCtl = ctl;
+  let done = 0;
+  const text = () => `מזהה ${n} מסמכים… ${done} מוכנים · ${Math.round((Date.now() - t0) / 1000)} שניות`;
+  $("upBusyText").textContent = text();
+  const tick = setInterval(() => { $("upBusyText").textContent = text(); if (Date.now() - t0 >= 15000) $("upSkipBox").hidden = false; }, 1000);
+  const noKey = state.store.demo && !state.settings.geminiKey;
+  let next = 0;
+  const worker = async () => {
+    while (next < n) {
+      const d = drafts[next++];
+      if (noKey) d.rec = { ok: false, message: "בתצוגה אין זיהוי אוטומטי. באתר האמיתי, אחרי הוספת מפתח, השדות יתמלאו לבד." };
+      else d.rec = ctl.signal.aborted ? { ok: false, message: "דילגת על הזיהוי. ממלאים ידנית." } : await recognize(d.pages, state.settings, ctl.signal);
+      done++;
+    }
+  };
+  try { await Promise.all([worker(), worker(), worker()]); }
+  finally { clearInterval(tick); if (runId === up.runId) { $("upSkipBox").hidden = true; up.skipCtl = null; } }
+  if (runId !== up.runId || !$("uploadDlg").open) return;
+  $("upBusy").hidden = true;
+  showStep("upReview");
+  showDraft(0);
+}
+function showDraft(i) {
+  const b = up.batch; if (!b) return;
+  if (b.i >= 0 && b.i !== i && b.drafts[b.i]) b.drafts[b.i].snap = snapForm();
+  b.i = i;
+  const d = b.drafts[i];
+  up.pages = d.pages; up.pageIdx = 0;
+  if (d.snap) { restoreForm(d.snap); renderReviewImg(); }
+  else fillReview(d.rec?.ok ? d.rec.result : {}, d.rec);
+  renderBatchNav();
+}
+function renderBatchNav() {
+  const b = up.batch, box = $("rvBatch");
+  box.hidden = !b;
+  $("upReview").classList.toggle("is-dropped", !!(b && b.drafts[b.i].drop));
+  if (!b) { $("rvSave").textContent = "אישור ושמירה"; return; }
+  const n = b.drafts.length, d = b.drafts[b.i];
+  $("rvBatchPos").textContent = `מסמך ${b.i + 1} מתוך ${n}`;
+  $("rvPrev").disabled = b.i === 0; $("rvNext").disabled = b.i === n - 1;
+  $("rvBatchDots").innerHTML = b.drafts.map((x, k) => `<button type="button" data-bi="${k}" class="dot${k === b.i ? " is-active" : ""}${x.drop ? " is-drop" : ""}${x.rec && !x.rec.ok ? " is-manual" : ""}" aria-label="מסמך ${k + 1}">${k + 1}</button>`).join("");
+  $("rvDrop").textContent = d.drop ? "להחזיר את המסמך הזה" : "לא לשמור את המסמך הזה";
+  $("rvSave").textContent = batchSaveLabel();
+}
+$("rvPrev").onclick = () => up.batch && up.batch.i > 0 && showDraft(up.batch.i - 1);
+$("rvNext").onclick = () => up.batch && up.batch.i < up.batch.drafts.length - 1 && showDraft(up.batch.i + 1);
+$("rvBatchDots").addEventListener("click", (e) => { const b = e.target.closest("[data-bi]"); if (b) showDraft(Number(b.dataset.bi)); });
+$("rvDrop").onclick = () => { const d = up.batch.drafts[up.batch.i]; d.drop = !d.drop; renderBatchNav(); };
+
+async function saveBatch() {
+  const b = up.batch, btn = $("rvSave");
+  b.drafts[b.i].snap = snapForm();
+  const todo = [];
+  // בדיקה של כל המסמכים לפני ששומרים משהו
+  for (let k = 0; k < b.drafts.length; k++) {
+    const d = b.drafts[k];
+    if (d.drop || d.saved) continue;
+    if (k !== b.i) showDraft(k);
+    const meta = collectMeta();
+    if (!meta) { toast(`מסמך ${k + 1}: ${$("toast")?.textContent || "חסרים פרטים"}`, 3500); return; }
+    if (meta.kind === "invoice" && meta.invoiceNumber && meta.total != null) {
+      const dup = (await state.store.findByInvoiceNumber(meta.invoiceNumber).catch(() => [])).find((r) => r.kind === "invoice" && Math.abs((r.total || 0) - meta.total) < 0.01);
+      if (dup && !(await confirmBox(`מסמך ${k + 1}: חשבונית ${dup.invoiceNumber} של ${dup.supplier || "ספק"} על ₪${fmtMoney(dup.total)} כבר שמורה. לשמור בכל זאת?`, "שמור בכל זאת", false))) return;
+    }
+    todo.push({ d, meta });
+  }
+  if (!todo.length) { $("uploadDlg").close(); return; }
+  btn.disabled = true;
+  let saved = 0, lastMonth = null, lastKind = null;
+  try {
+    for (const { d, meta } of todo) {
+      btn.textContent = `שומר ${saved + 1} מתוך ${todo.length}…`;
+      rememberMeta(meta);
+      meta.thumb = await makeThumb(d.pages[0]);
+      await state.store.addDoc(meta, d.pages);
+      d.saved = true; saved++; lastMonth = meta.month; lastKind = meta.kind;
+    }
+  } catch (err) {
+    console.error(err);
+    toast(`נשמרו ${saved} מתוך ${todo.length}. השמירה של השאר נכשלה, נסי שוב.`, 5000);
+    btn.disabled = false; renderBatchNav(); refreshUsage(); loadRows(); return;
+  }
+  btn.disabled = false;
+  refreshUsage();
+  toast(`נשמרו ${saved} מסמכים`);
+  state.month = lastMonth;
+  up.batch = null; renderBatchNav();
+  if (state.view !== lastKind) setView(lastKind); else loadRows();
+  $("uploadDlg").close();
 }
 
 /* ======================= ממתינים לאישור (מהאייפון) ======================= */
