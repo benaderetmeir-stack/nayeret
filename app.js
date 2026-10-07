@@ -1,12 +1,12 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007f";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007f";
-import { recognize } from "./ocr.js?v=20261007f";
-import { getRate, curSign } from "./fx.js?v=20261007f";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007f";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261007f";
-import { isPayment, matchPayments } from "./paymatch.js?v=20261007f";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007f";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261007h";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261007h";
+import { recognize } from "./ocr.js?v=20261007h";
+import { getRate, curSign } from "./fx.js?v=20261007h";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261007h";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261007h";
+import { isPayment, matchPayments } from "./paymatch.js?v=20261007h";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261007h";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -155,7 +155,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261007f");
+    const { seedDemo } = await import("./demo.js?v=20261007h");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -299,7 +299,7 @@ async function refreshPayMarks(rows) {
   try {
     const around = await state.store.listByRange(shift(dates[0], -75), shift(dates[dates.length - 1], 75));
     if (req !== payReq) return;
-    state.payMatch = matchPayments(around.filter((r) => r.kind === "invoice"), around.filter(isPayment));
+    state.payMatch = matchPayments(around.filter((r) => r.kind === "invoice"), around.filter(isPayment), state.settings.businessName || "");
     renderTable();
   } catch (e) { console.warn("pay marks", e); }
 }

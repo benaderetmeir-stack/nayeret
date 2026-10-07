@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261007f";
+import { supplierKey } from "./recur.js?v=20261007h";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
@@ -14,7 +14,10 @@ function nameScore(a, b) {
 }
 
 // מחזיר Map: מזהה מסמך ← המסמך שהותאם לו (בשני הכיוונים)
-export function matchPayments(invoices, payments) {
+export function matchPayments(invoices, payments, ownName = "") {
+  const own = new Set(supplierKey(ownName).split(" ").filter((t) => t.length > 2));
+  // השם באישור תשלום יכול להיות של המשלם (העסק שלך) או של הבנק, אז בודקים גם את הפירוט
+  const payNames = (p) => [p.name, p.details].filter((n) => n && !(own.size && supplierKey(n).split(" ").some((t) => own.has(t))));
   const pairs = [];
   for (const p of payments) {
     const amt = Number(p.amount); if (!(amt > 0) || !p.date) continue;
@@ -22,10 +25,12 @@ export function matchPayments(invoices, payments) {
       const tot = Number(inv.total); if (!(tot > 0) || !inv.date) continue;
       if (Math.abs(tot - amt) > 1) continue;
       const d = days(p.date, inv.date); if (d > MAX_DAYS) continue;
-      const ns = nameScore(p.name || p.details, inv.supplier);
-      if (ns !== null && ns < 0.5) continue;            // שמות שונים: לא אותו ספק
-      if (ns === null && d > 31) continue;              // בלי שם: רק אם קרוב בזמן
-      pairs.push({ p, inv, score: d - (ns || 0) * 30 });
+      const scores = payNames(p).map((n) => nameScore(n, inv.supplier)).filter((x) => x !== null);
+      const ns = scores.length ? Math.max(...scores) : null;
+      const exact = Math.abs(tot - amt) < 0.01;
+      if (ns !== null && ns < 0.5 && !(exact && d <= 60)) continue;   // שם אחר: רק סכום מדויק ועד 60 יום
+      if (ns === null && d > 60) continue;                            // בלי שם: עד 60 יום
+      pairs.push({ p, inv, score: d - (ns || 0) * 30 + (ns !== null && ns < 0.5 ? 40 : 0) });
     }
   }
   pairs.sort((a, b) => a.score - b.score);

@@ -8,7 +8,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "kind": "invoice" | "other",
   "docType": string,          // for "other" choose the closest from: "תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח"; if none fits, a short Hebrew label. For invoices: "חשבונית מס", "חשבונית מס קבלה", "קבלה"
   "supplier": string,         // for invoices/receipts: issuing business name as printed
-  "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier)
+  "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier). For a payment confirmation / bank transfer: the RECIPIENT who got the money (not the payer, not the bank)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
   "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable. If the document shows only a month and year (e.g. a payslip for "09/26" or "ספטמבר 2026"), give the 1st of that month and set monthOnly true
   "monthOnly": boolean,       // true when the document has only month+year without a specific day
