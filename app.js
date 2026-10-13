@@ -1,12 +1,12 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261008b";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261008b";
-import { recognize } from "./ocr.js?v=20261008b";
-import { getRate, curSign } from "./fx.js?v=20261008b";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261008b";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261008b";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261008b";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261008b";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261013";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261013";
+import { recognize } from "./ocr.js?v=20261013";
+import { getRate, curSign } from "./fx.js?v=20261013";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261013";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261013";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261013";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261013";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -157,7 +157,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261008b");
+    const { seedDemo } = await import("./demo.js?v=20261013");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -316,8 +316,8 @@ const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על
 function payMark(r) {
   const m = state.payMatch?.get(r.id);
   if (isTarget(r)) {
-    const on = !!m || !!r.paid;
-    const title = m ? `שולם · אישור תשלום מ-${fmtDate(m.date)}` : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
+    const on = !!m || !!r.paid || !!r.receipt;
+    const title = m ? `שולם · אישור תשלום מ-${fmtDate(m.date)}` : r.receipt ? "שולמה · חשבונית מס קבלה (התשלום מופיע במסמך)" : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
     return `<button type="button" class="pay-mark${on ? " is-on" : ""}" data-pay title="${title}" aria-label="${title}">✓</button>`;
   }
   if (!isPayment(r)) return "";
@@ -339,6 +339,12 @@ async function togglePay(row) {
     try { await Promise.all([state.store.updateDoc(row.id, { notWith: a }), state.store.updateDoc(m.id, { notWith: b })]); toast("ההתאמה בוטלה"); }
     catch (e) { console.error(e); toast("הביטול נכשל, נסי שוב"); }
     return refreshPayMarks(state.rows);
+  }
+  if (row.receipt && !row.paid) {   // סומנה לפי המסמך: אפשר לבטל אם הזיהוי טעה
+    if (!(await confirmBox("החשבונית סומנה כשולמה כי זוהתה כחשבונית מס קבלה (התשלום מופיע במסמך).\nזה לא נכון? אפשר לבטל.", "לסמן שלא שולמה", false))) return;
+    row.receipt = false; renderTable();
+    try { await state.store.updateDoc(row.id, { receipt: false }); } catch (e) { console.error(e); row.receipt = true; renderTable(); toast("השמירה נכשלה, נסי שוב"); }
+    return;
   }
   const key = isTarget(row) ? "paid" : "hasInvoice";
   const val = !row[key];
@@ -732,6 +738,7 @@ function fillReview(d, rec) {
   $("rvNote").value = d.note || "";
   $("rvDetails").value = d.details || "";
   up.items = Array.isArray(d.items) ? d.items : [];
+  up.receipt = !!(d.receipt ?? d.paidOnDoc);   // חשבונית מס קבלה: התשלום מופיע במסמך עצמו
   catTouched = false;
   // עריכה: מה שנשמר. חדש: מה שנלמד על הספק קודם, ורק אחר כך הניחוש של הזיהוי
   setCat(up.edit ? (d.category || catMemory(d.supplier)) : (catMemory(d.supplier) || d.category || (d.kind !== "other" && rec?.ok ? (rec.result.category || "") : "")));
@@ -919,7 +926,7 @@ function collectMeta() {
     Object.assign(meta, {
       supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), exempt: $("rvExempt").checked,
       total: numVal($("rvTotal")), vat: $("rvExempt").checked ? 0 : numVal($("rvVat")), net: numVal($("rvNet")),
-      docType: "", name: "", amount: null, category: currentCat(), items: up.items || []
+      docType: "", name: "", amount: null, category: currentCat(), items: up.items || [], receipt: !!up.receipt
     });
     if (meta.net == null && meta.total != null && meta.vat != null) meta.net = r2(meta.total - meta.vat);
     if (!meta.supplier) return fieldError("rvSupplier", "חסר שם ספק");
@@ -1001,7 +1008,7 @@ function snapForm() {
   return {
     html, vals: els.map((e) => (e.type === "checkbox" || e.type === "radio") ? e.checked : e.value),
     hid: SNAP_HIDDEN.map((id) => $(id).hidden),
-    up: { items: up.items, src: up.src, manualMonth: up.manualMonth, dupFound: up.dupFound },
+    up: { items: up.items, receipt: up.receipt, src: up.src, manualMonth: up.manualMonth, dupFound: up.dupFound },
     fx: { ...fx }, catTouched
   };
 }

@@ -17,6 +17,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "vat": number | null,       // VAT amount
   "net": number | null,       // amount before VAT
   "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
+  "paidOnDocument": boolean,  // true if the document itself confirms payment was received: a receipt (קבלה / חשבונית מס קבלה) or a payment section (אמצעי תשלום: אשראי, מזומן, העברה, צ'ק, "שולם")
   "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
   "category": string,         // for invoices only, one of: "חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר". The business is a medical-cosmetics clinic.
 "details": string,          // short Hebrew summary (max ~70 chars). Invoice: what was bought / which service, e.g. "סרום היאלורוני x12, מסכות אלגינט x20" or "ניקיון חודשי". Salary/money transfer: "הועבר ל<recipient> סך של ₪<amount>" (+ purpose if shown). Bank / credit-card statement: the main payees. Other: what the document is about.
@@ -70,6 +71,7 @@ export function normalizeResult(r) {
     date: isoDate(r.date),
     total: num(r.total), vat: num(r.vat), net: num(r.net),
     exempt: !!r.exempt,
+    paidOnDoc: !!r.paidOnDocument || /קבלה/.test(String(r.docType || "")),
     amount: num(r.amount),
     currency: normCur(r.currency),
     category: String(r.category || "").trim(),
