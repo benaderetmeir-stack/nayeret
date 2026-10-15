@@ -488,3 +488,6 @@ button.big-choice { font: inherit; font-weight: 700; font-size: 17px; }
   .up-start #upScan { grid-column: 1 / -1; }
   .up-start .big-choice { padding: 22px 10px; }
 }
+
+.alloc-warn { background: #FDECEA; color: #A93226; border: 1.5px solid #E6A19A; font-weight: 600; font-size: 14px; }
+.pill-alloc { background: #FDECEA; color: #A93226; font-weight: 700; }

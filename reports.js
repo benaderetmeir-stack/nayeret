@@ -1,17 +1,18 @@
 // הפקת קבצים: טבלה ב-PDF, קובץ מסמכים ב-PDF, אקסל, ושיתוף
-import { loadImage } from "./images.js?v=20261015";
+import { loadImage } from "./images.js?v=20261016";
 
 export const COLS = {
   invoice: [
     { key: "idx", label: "#", w: 44, color: "E8EEF3" },
     { key: "thumb", label: "תמונה", w: 64, color: "E4F4FA" },
-    { key: "date", label: "תאריך", w: 104, color: "DDF1F7" },
-    { key: "supplier", label: "ספק", w: 250, color: "D8F3F1" },
-    { key: "invoiceNumber", label: "מס' חשבונית", w: 130, color: "E3EEFB" },
+    { key: "date", label: "תאריך", w: 124, color: "DDF1F7" },
+    { key: "supplier", label: "ספק", w: 200, color: "D8F3F1" },
+    { key: "invoiceNumber", label: "מס' חשבונית", w: 115, color: "E3EEFB" },
+    { key: "allocation", label: "מס' הקצאה", w: 120, color: "E3EEFB", report: true },
     { key: "net", label: "לפני מע\"מ", w: 118, color: "E0F2EC", money: true, sum: true },
     { key: "vat", label: "מע\"מ", w: 104, color: "FDF1DC", money: true, sum: true },
     { key: "total", label: "סכום כולל", w: 124, color: "CDEBF5", money: true, sum: true, strong: true },
-    { key: "note", label: "הערה", w: 180, color: "F1F4F6" }
+    { key: "note", label: "הערה", w: 165, color: "F1F4F6" }
   ],
   other: [
     { key: "idx", label: "#", w: 44, color: "E8EEF3" },
@@ -23,6 +24,24 @@ export const COLS = {
     { key: "note", label: "הערה", w: 250, color: "F1F4F6" }
   ]
 };
+
+// ===== מספר הקצאה: חובה בחשבונית מס מעל סף (לפני מע"מ), לפי תאריך החשבונית =====
+export function allocThreshold(date) {
+  const d = String(date || "");
+  if (d >= "2026-06-01") return 5000;
+  if (d >= "2026-01-01") return 10000;
+  if (d >= "2025-01-01") return 20000;
+  if (d >= "2024-05-05") return 25000;
+  return null;
+}
+export function needsAllocation(r) {
+  if (!r || r.kind !== "invoice" || r.exempt || !(Number(r.vat) > 0)) return false;
+  if ((r.currency || "ILS") !== "ILS") return false;
+  const lim = allocThreshold(r.date), net = Number(r.net ?? (r.total - r.vat));
+  return lim != null && net > lim;
+}
+export const missingAllocation = (r) => needsAllocation(r) && !String(r.allocation || "").trim();
+export const ALLOC_MISSING = "חסר מספר הקצאה";
 
 export const KIND_LABEL = { invoice: "חשבוניות וקבלות", other: "ניירת אחרת" };
 
@@ -106,7 +125,8 @@ export function cellText(row, key) {
   if (key === "date") return fmtDate(row.date);
   const col = [...COLS.invoice, ...COLS.other].find((c) => c.key === key);
   if (col?.money) return fmtMoney(row[key]);
-  if (key === "note") return [fxNote(row), row.late ? `באיחור מ-${row.origMonth?.split("-").reverse().join("/")}` : "", row.note || ""].filter(Boolean).join(" · ");
+  if (key === "allocation") return row.allocation || (missingAllocation(row) ? "חסר!" : "");
+  if (key === "note") return [missingAllocation(row) ? ALLOC_MISSING : "", fxNote(row), row.late ? `באיחור מ-${row.origMonth?.split("-").reverse().join("/")}` : "", row.note || ""].filter(Boolean).join(" · ");
   return row[key] == null ? "" : String(row[key]);
 }
 
@@ -206,6 +226,7 @@ async function renderTablePages(pdf, rows, kind, meta, { linked = false }) {
         }
         ctx.fillStyle = col.key === "idx" || col.key === "note" ? INK2 : (col.strong ? BLUE : INK);
         ctx.font = `${col.strong ? 700 : col.key === "supplier" || col.key === "name" ? 600 : 400} ${col.key === "note" ? 12 : 14}px ${FONT}`;
+        if (col.key === "allocation" && missingAllocation(r)) { ctx.fillStyle = "#C0392B"; ctx.font = `700 14px ${FONT}`; }
         ctx.textAlign = col.money ? "left" : "right";
         ctx.fillText(fitText(ctx, t, w - 18), col.money ? x + 10 : x + w - 10, y + RH / 2 - (orig ? 8 : 0));
         if (orig) { ctx.fillStyle = INK2; ctx.font = `500 12px ${FONT}`; ctx.fillText(fitText(ctx, orig, w - 18), x + 10, y + RH / 2 + 11); }
@@ -283,7 +304,7 @@ export async function buildDocsPdf(rows, kind, getPages, onProgress, opts = {}) 
       const w = im.naturalWidth * sc, h = im.naturalHeight * sc;
       pdf.addImage(pages[j].data, "JPEG", (PW - w) / 2, top + (ah - h) / 2, w, h, undefined, "FAST");
       if (stamp) {
-        const parts = [who, fmtDate(r.date), amt != null ? "₪" + fmtMoney(amt) : "", kind === "invoice" && r.invoiceNumber ? "מס' " + r.invoiceNumber : "", pages.length > 1 ? `דף ${j + 1}/${pages.length}` : ""];
+        const parts = [who, fmtDate(r.date), amt != null ? "₪" + fmtMoney(amt) : "", kind === "invoice" && r.invoiceNumber ? "מס' " + r.invoiceNumber : "", kind === "invoice" && r.allocation ? "הקצאה " + r.allocation : "", pages.length > 1 ? `דף ${j + 1}/${pages.length}` : ""];
         const st = stampImage(parts.filter(Boolean).join("  ·  "), i + 1);
         const sw = st.w * 0.26, sh = st.h * 0.26; // px → מ"מ בערך
         pdf.addImage(st.url, "PNG", PW - M - sw, 4, sw, sh);
@@ -332,7 +353,7 @@ export async function buildCombinedPdf(rows, kind, meta, getPages, onProgress) {
       const sc = Math.min(aw / im.naturalWidth, ah / im.naturalHeight);
       const w = im.naturalWidth * sc, h = im.naturalHeight * sc;
       pdf.addImage(pages[j].data, "JPEG", (PW_ - w) / 2, TOP + (ah - h) / 2, w, h, undefined, "FAST");
-      const parts = [who, fmtDate(r.date), amt != null ? "₪" + fmtMoney(amt) : "", kind === "invoice" && r.invoiceNumber ? "מס' " + r.invoiceNumber : "", pages.length > 1 ? `דף ${j + 1}/${pages.length}` : ""];
+      const parts = [who, fmtDate(r.date), amt != null ? "₪" + fmtMoney(amt) : "", kind === "invoice" && r.invoiceNumber ? "מס' " + r.invoiceNumber : "", kind === "invoice" && r.allocation ? "הקצאה " + r.allocation : "", pages.length > 1 ? `דף ${j + 1}/${pages.length}` : ""];
       const st = stampImage(parts.filter(Boolean).join("  ·  "), i + 1);
       pdf.addImage(st.url, "PNG", PW_ - M - st.w, 16, st.w, st.h);
       pdf.addImage(back.url, "PNG", M, 16, back.w, back.h);
@@ -466,6 +487,7 @@ function addSheet(wb, rows, kind, meta) {
       cell.font = { name: "Arial", bold: !!c.strong, color: { argb: c.strong ? "FF0E6A8C" : "FF0B3448" } };
       cell.border = { bottom: { style: "thin", color: { argb: "FFD3E8F0" } } };
       if (ri % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF6FBFD" } };
+      if (c.key === "allocation" && missingAllocation(r)) { cell.font = { name: "Arial", bold: true, color: { argb: "FFC0392B" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDE2E0" } }; }
     });
   });
 

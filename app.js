@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261015";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261015";
-import { recognize } from "./ocr.js?v=20261015";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261015";
-import { getRate, curSign } from "./fx.js?v=20261015";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261015";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261015";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261015";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261015";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261016";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261016";
+import { recognize } from "./ocr.js?v=20261016";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261016";
+import { getRate, curSign } from "./fx.js?v=20261016";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261016";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261016";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261016";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261016";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261015");
+    const { seedDemo } = await import("./demo.js?v=20261016");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -278,7 +278,7 @@ async function loadRows() {
         // מספר בחיפוש: מחפש גם בסכומים (843 ימצא 843 וגם 843.50)
         const qn = /^[\d.,₪\s]+$/.test(s.text) ? parseFloat(s.text.replace(/[₪,\s]/g, "")) : NaN;
         const amtHit = (v) => v != null && v !== "" && Number.isFinite(qn) && (/[.]/.test(s.text) ? Math.abs(Number(v) - qn) < 0.01 : Math.trunc(Math.abs(Number(v))) === Math.trunc(qn));
-        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.docType, r.note, r.details].some((v) => String(v || "").toLowerCase().includes(q))
+        rows = rows.filter((r) => [r.supplier, r.name, r.invoiceNumber, r.allocation, r.docType, r.note, r.details].some((v) => String(v || "").toLowerCase().includes(q))
           || [r.total, r.net, r.vat, r.amount, r.origAmount].some(amtHit));
       }
       if (s.amtFrom != null) rows = rows.filter((r) => (amountOf(r) ?? -Infinity) >= s.amtFrom);
@@ -314,6 +314,7 @@ async function refreshPayMarks(rows) {
 const isTarget = (r) => r.kind === "invoice" || isPayable(r);   // משהו שמשלמים עליו
 const targetDesc = (t) => t.kind === "invoice" ? `לחשבונית של ${t.supplier || "הספק"} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.total)}` : `ל${t.docType || "מסמך"}${t.name ? ` (${t.name})` : ""} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.amount)}`;
 const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על ₪${fmtMoney(p.amount)}${p.name ? ` (${p.name})` : ""}`;
+const allocMark = (r) => missingAllocation(r) ? `<span class="pill pill-alloc" title="חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ בלי מספר הקצאה: אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית עם מספר הקצאה">חסר מס' הקצאה</span> ` : "";
 function payMark(r) {
   const m = state.payMatch?.get(r.id);
   if (isTarget(r)) {
@@ -377,7 +378,7 @@ const SEARCH_COLS = [
 const kindTag = (r) => r.kind === "invoice" ? `<span class="kind-tag kind-inv">חשבונית</span>` : `<span class="kind-tag kind-oth">ניירת אחרת</span>${r.docType ? `<small class="kind-sub">${esc(r.docType)}</small>` : ""}`;
 function renderTable() {
   const kind = state.view, rows = state.rows, mixed = !!state.search;
-  const cols = mixed ? SEARCH_COLS : COLS[kind];
+  const cols = mixed ? SEARCH_COLS : COLS[kind].filter((c) => !c.report);
   const thClass = { kindTag: "th-type", who: "th-name", amt: "th-total", idx: "th-num", thumb: "th-img", date: "th-date", supplier: "th-name", name: "th-name", invoiceNumber: "th-invno", net: "th-net", vat: "th-vat", total: "th-total", docType: "th-type", note: "th-note", amount: "th-amount" };
   const allSel = rows.length && rows.every((r) => state.selected.has(r.id));
   $("docThead").innerHTML = `<tr><th class="th-num col-sel"><input type="checkbox" id="selAll" aria-label="בחר הכול" ${allSel ? "checked" : ""}></th>` +
@@ -388,7 +389,7 @@ function renderTable() {
     ${cols.map((c) => {
       if (c.key === "idx") return `<td class="col-idx">${i + 1}</td>`;
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
-      if (c.key === "note") return `<td class="note-cell">${payMark(r)}${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
+      if (c.key === "note") return `<td class="note-cell">${payMark(r)}${allocMark(r)}${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
       if (c.key === "kindTag") return `<td>${kindTag(r)}</td>`;
       if (c.key === "who") return `<td class="name-cell">${esc(r.kind === "invoice" ? r.supplier : r.name)}</td>`;
@@ -412,7 +413,7 @@ function renderTable() {
       <button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button>
       <div class="card-main" data-open>
         <div class="card-title">${i + 1}. ${esc(r.kind === "invoice" ? r.supplier : `${r.docType || ""}${r.name ? " · " + r.name : ""}`)}</div>
-        <div class="card-sub">${mixed ? kindTag(r).replace(/<small[^>]*>.*<\/small>/, "") : ""}${payMark(r)}<span>${fmtDate(r.date)}</span>${r.kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
+        <div class="card-sub">${mixed ? kindTag(r).replace(/<small[^>]*>.*<\/small>/, "") : ""}${payMark(r)}${allocMark(r)}<span>${fmtDate(r.date)}</span>${r.kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
       </div>
       <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${fxOrig(r, r.kind === "invoice" ? "total" : "amount") ? `<small class="fx-orig">${esc(fxOrig(r, r.kind === "invoice" ? "total" : "amount"))}</small>` : ""}${r.kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
         <label class="check" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" class="rowSel" ${state.selected.has(r.id) ? "checked" : ""} aria-label="בחירה"></label></div>
@@ -685,7 +686,7 @@ function setKind(kind) {
   document.querySelector(`input[name="rvKind"][value="${kind}"]`).checked = true;
   $("rvInvoiceFields").hidden = kind !== "invoice";
   $("rvOtherFields").hidden = kind !== "other";
-  checkDup();
+  checkDup(); updateAllocWarn();
 }
 document.querySelectorAll('input[name="rvKind"]').forEach((r) => r.addEventListener("change", () => { carryOver(r.value); setKind(r.value); syncDate(); }));
 
@@ -742,7 +743,7 @@ function fillReview(d, rec) {
   if (rec) { r.hidden = false; r.textContent = rec.ok ? "זיהיתי את הפרטים הבאים. בדקי, תקני במידת הצורך ואשרי." : rec.message; }
   else r.hidden = true;
   setKind(d.kind === "other" ? "other" : "invoice");
-  $("rvSupplier").value = d.supplier || ""; $("rvInvNo").value = d.invoiceNumber || "";
+  $("rvSupplier").value = d.supplier || ""; $("rvInvNo").value = d.invoiceNumber || ""; $("rvAlloc").value = d.allocation || "";
   $("rvDateI").value = d.date || ""; $("rvDateO").value = d.date || "";
   $("rvExempt").checked = !!d.exempt;
   $("rvTotal").value = d.total ?? ""; $("rvVat").value = d.vat ?? ""; $("rvNet").value = d.net ?? "";
@@ -765,7 +766,7 @@ function fillReview(d, rec) {
   else syncDate();
   $("rvDup").hidden = true; up.dupFound = null;
   checkDup();
-  renderPriceAlert();
+  renderPriceAlert(); updateAllocWarn();
   setTimeout(() => (d.supplier ? $("rvSave") : (curKind() === "invoice" ? $("rvSupplier") : $("rvDocTypeSel"))).focus({ preventScroll: true }), 60);
 }
 function renderReviewImg() {
@@ -937,7 +938,7 @@ function collectMeta() {
   const meta = { kind, date, month, origMonth, late: origMonth !== month && isClosed(origMonth), note: $("rvNote").value.trim(), details: $("rvDetails").value.trim() };
   if (kind === "invoice") {
     Object.assign(meta, {
-      supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), exempt: $("rvExempt").checked,
+      supplier: $("rvSupplier").value.trim(), invoiceNumber: $("rvInvNo").value.trim(), allocation: $("rvAlloc").value.replace(/\D/g, ""), exempt: $("rvExempt").checked,
       total: numVal($("rvTotal")), vat: $("rvExempt").checked ? 0 : numVal($("rvVat")), net: numVal($("rvNet")),
       docType: "", name: "", amount: null, category: currentCat(), items: up.items || [], receipt: !!up.receipt
     });
@@ -946,7 +947,7 @@ function collectMeta() {
     if (!date) return fieldError("rvDateI", "חסר תאריך");
     if (meta.total == null) return fieldError("rvTotal", "חסר סכום כולל");
   } else {
-    Object.assign(meta, { docType: currentDocType(), name: $("rvName").value.trim(), amount: numVal($("rvAmount")), supplier: "", invoiceNumber: "", total: null, vat: null, net: null, exempt: false });
+    Object.assign(meta, { docType: currentDocType(), name: $("rvName").value.trim(), amount: numVal($("rvAmount")), supplier: "", invoiceNumber: "", allocation: "", total: null, vat: null, net: null, exempt: false });
     if (!meta.docType) return fieldError($("rvDocTypeSel").value === OTHER ? "rvDocType" : "rvDocTypeSel", "חסר סוג מסמך");
     if (!date) return fieldError("rvDateO", "חסר תאריך");
   }
@@ -1012,8 +1013,19 @@ function nextInQueue() {
 }
 
 
+/* ======================= מספר הקצאה: התראה במסך האישור ======================= */
+function updateAllocWarn() {
+  const exempt = $("rvExempt").checked, total = numVal($("rvTotal")), vat = exempt ? 0 : numVal($("rvVat"));
+  let net = numVal($("rvNet")); if (net == null && total != null && vat != null) net = total - vat;
+  const r = { kind: curKind(), exempt, vat, net, total, date: $("rvDateI").value, currency: fx.on ? "FX" : "ILS", allocation: $("rvAlloc").value };
+  const box = $("rvAllocWarn");
+  box.hidden = !missingAllocation(r);
+  if (!box.hidden) box.textContent = `⚠ חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ, ולא מצאתי עליה מספר הקצאה. בלי מספר הקצאה אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית מתוקנת (אם המספר כן מופיע, הקלידי אותו).`;
+}
+["rvAlloc", "rvTotal", "rvVat", "rvNet", "rvDateI", "rvExempt"].forEach((id) => { $(id).addEventListener("input", updateAllocWarn); $(id).addEventListener("change", updateAllocWarn); });
+
 /* ======================= כמה מסמכים ביחד: מזהים את כולם, מדפדפים ומאשרים הכול ======================= */
-const SNAP_HIDDEN = ["rvInvoiceFields", "rvOtherFields", "rvCatOtherBox", "rvDocTypeOtherBox", "rvFx", "rvFxLinkRow", "rvMonthHint", "rvRecog", "rvDup", "rvPriceAlert"];
+const SNAP_HIDDEN = ["rvInvoiceFields", "rvOtherFields", "rvCatOtherBox", "rvDocTypeOtherBox", "rvFx", "rvFxLinkRow", "rvMonthHint", "rvRecog", "rvDup", "rvPriceAlert", "rvAllocWarn"];
 const SNAP_HTML = ["rvRecog", "rvDup", "rvPriceAlert", "rvMonthHint", "rvFxHint", "rvFxTitle", "rvCat", "rvDocTypeSel"];
 function snapForm() {
   const els = [...$("upReview").querySelectorAll("input, select")];

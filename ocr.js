@@ -10,6 +10,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "supplier": string,         // for invoices/receipts: issuing business name as printed
   "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier). For a payment confirmation / bank transfer: the RECIPIENT who got the money (not the payer, not the bank)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
+  "allocationNumber": string, // מספר הקצאה (Israeli tax authority allocation number, usually 9 digits, printed near "מספר הקצאה" / "מס' הקצאה"), digits only, "" if not printed
   "date": "YYYY-MM-DD",       // document date (not print date); "" if unreadable. If the document shows only a month and year (e.g. a payslip for "09/26" or "ספטמבר 2026"), give the 1st of that month and set monthOnly true
   "monthOnly": boolean,       // true when the document has only month+year without a specific day
   "currency": string,         // ISO code of the amounts as printed: "ILS" (₪, ש"ח, NIS), "USD" ($), "EUR" (€), "GBP" (£)...
@@ -68,6 +69,7 @@ export function normalizeResult(r) {
     supplier: String(r.supplier || "").trim(),
     name: String(r.name || "").trim(),
     invoiceNumber: String(r.invoiceNumber || "").replace(/\s+/g, "").trim(),
+    allocation: String(r.allocationNumber || "").replace(/\D/g, ""),
     date: isoDate(r.date),
     total: num(r.total), vat: num(r.vat), net: num(r.net),
     exempt: !!r.exempt,

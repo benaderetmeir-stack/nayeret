@@ -1,5 +1,5 @@
 // סורק מסמכים מהמצלמה: מסגרת ירוקה סביב הדף, צילום, ואז חיתוך ויישור
-import { compressCanvasSource } from "./images.js?v=20261015";
+import { compressCanvasSource } from "./images.js?v=20261016";
 
 /* ---------- זיהוי הדף בתמונה קטנה ---------- */
 // מחזיר 4 פינות [TL, TR, BR, BL] ביחס (0..1), או null
