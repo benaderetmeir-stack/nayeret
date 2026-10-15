@@ -1,12 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261013";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261013";
-import { recognize } from "./ocr.js?v=20261013";
-import { getRate, curSign } from "./fx.js?v=20261013";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261013";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261013";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261013";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261013";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261015";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261015";
+import { recognize } from "./ocr.js?v=20261015";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261015";
+import { getRate, curSign } from "./fx.js?v=20261015";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261015";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261015";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261015";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT } from "./reports.js?v=20261015";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -157,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261013");
+    const { seedDemo } = await import("./demo.js?v=20261015");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -594,6 +595,18 @@ function handleFiles(files, more) {
   }
   addFiles(files);
 }
+// סריקה עם מסגרת ירוקה, ולצידה צילום רגיל (כשהסורק לא תופס טוב)
+if (scannerSupported()) { $("upScan").hidden = false; $("upScanMore").hidden = false; }
+async function doScan(nativeInputId) {
+  let page;
+  try { page = await scanPage({ onNative: () => $(nativeInputId).click() }); }
+  catch (err) { console.warn(err); $("upScan").hidden = $("upScanMore").hidden = true; toast("לא קיבלתי גישה למצלמה. אפשר לצלם ב'צילום רגיל'.", 4500); return; }
+  if (!page) return;
+  up.pages.push(page);
+  $("upStart").hidden = true; showStep("upCollect"); renderPageStrip();
+}
+$("upScan").onclick = () => doScan("inCamera");
+$("upScanMore").onclick = () => doScan("inCameraMore");
 $("upMultiSame").onclick = () => { showStep("upCollect"); addFiles(up.pendingFiles); };
 $("upMultiSep").onclick = async () => {
   const files = up.pendingFiles, groups = [];

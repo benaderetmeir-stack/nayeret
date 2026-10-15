@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0FA3B1">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ניירת עסק">
+<link rel="apple-touch-icon" href="icon-nayeret.png?v=1">
 <title>ניירת INBAR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Rubik:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261013">
+<link rel="stylesheet" href="style.css?v=20261015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230FA3B1'/%3E%3Cpath d='M20 14h18l8 8v28H20z' fill='%23fff'/%3E%3Cpath d='M26 32h14M26 38h14M26 44h9' stroke='%230E6A8C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -245,10 +247,14 @@
   <!-- שלב 1: איסוף דפים -->
   <div class="up-step" id="upCollect">
     <div class="up-start" id="upStart">
+      <button type="button" class="big-choice" id="upScan" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+        <span>סריקה (מסגרת ירוקה)</span>
+      </button>
       <label class="big-choice">
         <input type="file" accept="image/*" capture="environment" id="inCamera" class="visually-hidden">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        <span>צילום</span>
+        <span>צילום רגיל</span>
       </label>
       <label class="big-choice">
         <input type="file" accept="image/*,application/pdf" multiple id="inFile" class="visually-hidden">
@@ -261,6 +267,7 @@
       <div class="ask-more">
         <p class="ask-q">יש עוד דף למסמך הזה?</p>
         <div class="row-actions">
+          <button type="button" class="btn btn-ghost" id="upScanMore" hidden>כן, סרוק עוד דף</button>
           <label class="btn btn-ghost">
             <input type="file" accept="image/*" capture="environment" id="inCameraMore" class="visually-hidden">
             כן, צלם עוד דף
@@ -460,6 +467,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=20261013"></script>
+<script type="module" src="app.js?v=20261015"></script>
 </body>
 </html>
