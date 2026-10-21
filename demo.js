@@ -1,5 +1,5 @@
 // נתונים לדוגמה למצב תצוגה בלבד. שמות העסקים בדויים.
-import { makeThumb } from "./images.js?v=20261021";
+import { makeThumb } from "./images.js?v=20261022";
 
 function receipt({ title, sub, lines, total, vat, no, date, exempt, kind }) {
   const W = 620, H = 860;
@@ -52,6 +52,7 @@ export async function seedDemo(store) {
     ...[2, 3, 4].map((n) => { const d = new Date(now.getFullYear(), now.getMonth() - n, 16); const m = ym(d); return inv("פלאפון תקשורת בע\"מ", "77" + n, day(m, 16), 129.9, { lines: [["חבילת סלולר", "110.08"]] }); }),
     { kind: "other", docType: "תלוש שכר", name: "עובדת א'", date: day(cur, 1), amount: 7420, note: "", month: cur, origMonth: cur, lines: [["שכר ברוטו", "9,100.00"], ["ניכויים", "1,680.00"]] },
     { kind: "other", docType: "העברת משכורת", name: "עובדת א'", date: day(cur, 9), amount: 7420, note: "", details: "הועבר לעובדת א' סך של ₪7,420 (משכורת)", month: cur, origMonth: cur, lines: [["העברה בנקאית", "7,420.00"]] },
+    { kind: "other", docType: "דרישת תשלום", name: "סטודיו נועה עיצוב", date: day(cur, 4), amount: 1755, note: "", details: "עיצוב פלאיירים ומודעות", month: cur, origMonth: cur, lines: [["עיצוב גרפי", "1,500.00"], ["מע\"מ", "255.00"]] },
     { kind: "other", docType: "תעודת משלוח", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 3), amount: null, note: "תואם לחשבונית 20931", month: cur, origMonth: cur, lines: [["סרום היאלורוני", "12 יח'"], ["מסכות אלגינט", "20 יח'"]] },
     { kind: "other", docType: "אישור תשלום", name: "מאור ציוד אסתטי בע\"מ", date: day(cur, 6), amount: 2360, note: "", details: "העברה לספק", month: cur, origMonth: cur, lines: [["העברה בנקאית", "2,360.00"]] },
     { kind: "other", docType: "אישור תשלום", name: "רו\"ח כהן ושות'", date: day(cur, 4), amount: 1200, note: "", details: "שכר טרחה", month: cur, origMonth: cur, lines: [["העברה בנקאית", "1,200.00"]] },

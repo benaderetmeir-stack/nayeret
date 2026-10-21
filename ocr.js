@@ -1,5 +1,5 @@
 // זיהוי מסמכים עם Google Gemini (מכסה חינמית)
-import { askGemini, shrinkPages } from "./fastgem.js?v=20261021";
+import { askGemini, shrinkPages } from "./fastgem.js?v=20261022";
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
 const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
 
@@ -7,7 +7,7 @@ const PROMPT = `You read Israeli business paperwork (Hebrew or English) for an a
 Look at the page images (all pages belong to ONE document) and return ONLY a JSON object:
 {
   "kind": "invoice" | "other",
-  "docType": string,          // for "other" choose the closest from: "תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח"; if none fits, a short Hebrew label. For invoices: "חשבונית מס", "חשבונית מס קבלה", "קבלה"
+  "docType": string,          // for "other" choose the closest from: "תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח", "דרישת תשלום", "חשבון עסקה", "הצעת מחיר"; if none fits, a short Hebrew label. For invoices: "חשבונית מס", "חשבונית מס קבלה", "קבלה"
   "supplier": string,         // for invoices/receipts: issuing business name as printed
   "name": string,             // for other paperwork: the main person/company name (employee, bank, supplier). For a payment confirmation / bank transfer: the RECIPIENT who got the money (not the payer, not the bank)
   "invoiceNumber": string,    // invoice/receipt number only, digits and dashes, "" if none
@@ -29,6 +29,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
 Rules:
 - "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי), including a plain receipt (קבלה) from a VAT-exempt dealer (עוסק פטור), which is the only document such a dealer issues.
 - Any document issued by a business that shows an amount paid for goods or services counts as "invoice". When unsure between the two, choose "invoice".
+- EXCEPTION: a payment request is NOT an invoice: "דרישת תשלום", "חשבון עסקה", "חשבון עסקה / דרישת תשלום", "הצעת מחיר", "פרופורמה" / "proforma", or a document that says it is not a tax invoice ("אינו חשבונית מס" / "אין לראות במסמך זה חשבונית מס"). These are "other" with docType "דרישת תשלום", "חשבון עסקה" or "הצעת מחיר", name = the supplier who issued it, amount = the total to pay.
 - A pension / provident fund report (דוח קופות גמל, פנסיה, קרן השתלמות, הפרשות מעסיק) is "דוח קופות גמל / פנסיה", NOT a payslip. A payslip (תלוש שכר) is for one employee for one month with gross/net salary.
 - "other" = payslips, bank statements, salary transfers, delivery notes without payment, payment confirmations and anything else.
 - Numbers as plain numbers without currency signs or thousands separators. Credit notes (זיכוי) as negative totals.
@@ -59,6 +60,7 @@ function isoDate(v) {
   return "";
 }
 
+const PROFORMA_RE = /דרישת תשלום|חשבון עסקה|הצעת מחיר|פרופורמה|proforma/i;
 const lastDay = (iso) => { const [y, m] = iso.split("-").map(Number); return `${iso.slice(0, 7)}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`; };
 export function normalizeResult(r) {
   r = r || {};
@@ -85,6 +87,11 @@ export function normalizeResult(r) {
   if (out.currency !== "ILS") { out.vat = 0; out.net = out.total; out.exempt = false; }
   if (out.exempt) { out.vat = 0; if (out.total != null) out.net = out.total; }
   if (out.total != null && out.vat != null && out.net == null) out.net = Math.round((out.total - out.vat) * 100) / 100;
+  // דרישת תשלום / חשבון עסקה / הצעת מחיר: אף פעם לא חשבונית (לא נכנסת לסכומי החשבוניות והמע"מ)
+  if (PROFORMA_RE.test(out.docType) && !/חשבונית/.test(out.docType)) {
+    out.kind = "other";
+    if (out.amount == null) out.amount = out.total;
+  }
   if (out.kind === "other" && !out.name) out.name = out.supplier;
   return out;
 }

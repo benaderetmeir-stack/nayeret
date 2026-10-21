@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261021";
+import { supplierKey } from "./recur.js?v=20261022";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
@@ -48,4 +48,20 @@ export function matchPayments(invoices, payments, ownName = "") {
     out.set(p.id, inv); out.set(inv.id, p);
   }
   return out;
+}
+
+// דרישת תשלום / חשבון עסקה: מחכים לחשבונית מס מאותו ספק על אותו סכום
+export const isProforma = (r) => r.kind === "other" && /דרישת תשלום|חשבון עסקה/.test(r.docType || "");
+export function findTaxInvoice(req, docs) {
+  const amt = Number(req.amount); if (!(amt > 0) || !req.date) return null;
+  let best = null, bestD = Infinity;
+  for (const inv of docs) {
+    if (inv.kind !== "invoice" || !inv.date || Math.abs(Number(inv.total) - amt) > 1) continue;
+    const d = (new Date(inv.date) - new Date(req.date)) / 86400000;
+    if (d < -15 || d > 120) continue;
+    const ns = nameScore(req.name || req.supplier || "", inv.supplier || "");
+    if (ns !== null && ns < 0.5) continue;
+    if (Math.abs(d) < bestD) { best = inv; bestD = Math.abs(d); }
+  }
+  return best;
 }

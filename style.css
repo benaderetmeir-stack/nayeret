@@ -494,3 +494,4 @@ button.big-choice { font: inherit; font-weight: 700; font-size: 17px; }
 
 .ios-tip { font-size: 13px; color: var(--ink-3); text-align: center; margin: 10px 4px 0; }
 #upStart[hidden] + .ios-tip { display: none; }
+.pill-wait { background: #FFF4EA; color: #B4590F; border: 1px solid #F0B07A; font-family: inherit; cursor: pointer; padding: 1px 8px; font-size: 11px; }

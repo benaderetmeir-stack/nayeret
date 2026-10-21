@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261021";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261021";
-import { recognize } from "./ocr.js?v=20261021";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261021";
-import { getRate, curSign } from "./fx.js?v=20261021";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261021";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261021";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261021";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261021";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261022";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261022";
+import { recognize } from "./ocr.js?v=20261022";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261022";
+import { getRate, curSign } from "./fx.js?v=20261022";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261022";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261022";
+import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice } from "./paymatch.js?v=20261022";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261022";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261021");
+    const { seedDemo } = await import("./demo.js?v=20261022");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -298,7 +298,7 @@ async function loadRows() {
 let payReq = 0;
 async function refreshPayMarks(rows) {
   const req = ++payReq;
-  const relevant = rows.filter((r) => isTarget(r) || isPayment(r));
+  const relevant = rows.filter((r) => isTarget(r) || isPayment(r) || isProforma(r));
   if (!relevant.length) { state.payMatch = new Map(); return; }
   const dates = relevant.map((r) => r.date).filter(Boolean).sort();
   if (!dates.length) return;
@@ -314,6 +314,12 @@ async function refreshPayMarks(rows) {
 const isTarget = (r) => r.kind === "invoice" || isPayable(r);   // משהו שמשלמים עליו
 const targetDesc = (t) => t.kind === "invoice" ? `לחשבונית של ${t.supplier || "הספק"} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.total)}` : `ל${t.docType || "מסמך"}${t.name ? ` (${t.name})` : ""} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.amount)}`;
 const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על ₪${fmtMoney(p.amount)}${p.name ? ` (${p.name})` : ""}`;
+const waitMark = (r) => {
+  if (!isProforma(r) || r.gotInvoice) return "";
+  const inv = state.payAround && findTaxInvoice(r, state.payAround);
+  if (inv) return "";
+  return `<button type="button" class="pill pill-wait" data-wait title="עדיין לא הועלתה חשבונית מס מ${esc(r.name || "הספק")} על הסכום הזה · לחיצה מסמנת שהתקבלה">ממתין לחשבונית מס</button> `;
+};
 const allocMark = (r) => missingAllocation(r) ? `<span class="pill pill-alloc" title="חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ בלי מספר הקצאה: אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית עם מספר הקצאה">חסר מס' הקצאה</span> ` : "";
 function payMark(r) {
   const m = state.payMatch?.get(r.id);
@@ -329,6 +335,12 @@ function payMark(r) {
   }
   if (isAuthority(r)) return "";   // תשלום לרשות / לקרן: אין חשבונית
   return `<button type="button" class="pay-mark is-missing" data-pay title="לא נמצאה חשבונית לתשלום הזה · לחיצה מסמנת שיש" aria-label="חסרה חשבונית">חסרה חשבונית</button>`;
+}
+async function markGotInvoice(row) {
+  if (!(await confirmBox(`לסמן שהתקבלה חשבונית מס עבור ה${row.docType || "מסמך"} הזה?\nבדרך כלל זה נעלם לבד כשמעלים את החשבונית.`, "כן, התקבלה", false))) return;
+  row.gotInvoice = true;
+  try { await state.store.updateDoc(row.id, { gotInvoice: true }); toast("סומן"); } catch (e) { console.error(e); toast("השמירה נכשלה, נסי שוב"); }
+  renderTable();
 }
 async function togglePay(row) {
   const m = state.payMatch?.get(row.id);
@@ -389,7 +401,7 @@ function renderTable() {
     ${cols.map((c) => {
       if (c.key === "idx") return `<td class="col-idx">${i + 1}</td>`;
       if (c.key === "thumb") return `<td><button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button></td>`;
-      if (c.key === "note") return `<td class="note-cell">${payMark(r)}${allocMark(r)}${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
+      if (c.key === "note") return `<td class="note-cell">${payMark(r)}${allocMark(r)}${waitMark(r)}${fxNote(r) ? `<span class="pill fx-pill">${esc(fxNote(r))}</span> ` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span> ` : ""}${esc(r.note)}${r.details ? `<span class="details-line" title="${esc(r.details)}">${esc(r.details)}</span>` : ""}</td>`;
       if (c.key === "supplier" || c.key === "name") return `<td class="name-cell">${esc(r[c.key])}</td>`;
       if (c.key === "kindTag") return `<td>${kindTag(r)}</td>`;
       if (c.key === "who") return `<td class="name-cell">${esc(r.kind === "invoice" ? r.supplier : r.name)}</td>`;
@@ -413,7 +425,7 @@ function renderTable() {
       <button class="thumb-btn" data-open aria-label="הגדלת המסמך">${r.thumb ? `<img class="thumb" src="${r.thumb}" alt="">` : `<span class="thumb"></span>`}${r.pageCount > 1 ? `<span class="thumb-badge">${r.pageCount}</span>` : ""}</button>
       <div class="card-main" data-open>
         <div class="card-title">${i + 1}. ${esc(r.kind === "invoice" ? r.supplier : `${r.docType || ""}${r.name ? " · " + r.name : ""}`)}</div>
-        <div class="card-sub">${mixed ? kindTag(r).replace(/<small[^>]*>.*<\/small>/, "") : ""}${payMark(r)}${allocMark(r)}<span>${fmtDate(r.date)}</span>${r.kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
+        <div class="card-sub">${mixed ? kindTag(r).replace(/<small[^>]*>.*<\/small>/, "") : ""}${payMark(r)}${allocMark(r)}${waitMark(r)}<span>${fmtDate(r.date)}</span>${r.kind === "invoice" && r.invoiceNumber ? `<span>מס' ${esc(r.invoiceNumber)}</span>` : ""}${r.late ? `<span class="pill pill-late">באיחור מ-${shortMonth(r.origMonth)}</span>` : ""}</div>
       </div>
       <div class="card-amt">${amountOf(r) != null ? "₪" + fmtMoney(amountOf(r)) : ""}${fxOrig(r, r.kind === "invoice" ? "total" : "amount") ? `<small class="fx-orig">${esc(fxOrig(r, r.kind === "invoice" ? "total" : "amount"))}</small>` : ""}${r.kind === "invoice" ? `<small>מע"מ ${fmtMoney(r.vat)}</small>` : ""}
         <label class="check" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" class="rowSel" ${state.selected.has(r.id) ? "checked" : ""} aria-label="בחירה"></label></div>
@@ -428,6 +440,7 @@ function onListClick(e) {
   if (e.target.classList.contains("rowSel")) { e.target.checked ? state.selected.add(row.id) : state.selected.delete(row.id); host.classList.toggle("is-selected", e.target.checked); renderSelection(); return; }
   if (e.target.closest("[data-del]")) { deleteRow(row); return; }
   if (e.target.closest("[data-pay]")) { togglePay(row); return; }
+  if (e.target.closest("[data-wait]")) { markGotInvoice(row); return; }
   if (e.target.closest("[data-open]")) openViewer(row);
 }
 $("docTbody").addEventListener("click", onListClick);
@@ -692,7 +705,7 @@ function setKind(kind) {
 document.querySelectorAll('input[name="rvKind"]').forEach((r) => r.addEventListener("change", () => { carryOver(r.value); setKind(r.value); syncDate(); }));
 
 // סוגי ניירת אחרת: רשימה קבועה + סוגים שהוקלדו בעבר + "אחר"
-const BASE_DOC_TYPES = ["תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח"];
+const BASE_DOC_TYPES = ["תלוש שכר", "דוח קופות גמל / פנסיה", "העברת משכורת", "דף בנק", "דף כרטיס אשראי", "תעודת משלוח", "אישור תשלום", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "הסכם / חוזה", "ביטוח", "דרישת תשלום", "חשבון עסקה", "הצעת מחיר"];
 const OTHER = "__other__";
 function docTypeList() {
   const custom = (state.settings.customDocTypes || []).filter((t) => !BASE_DOC_TYPES.includes(t));

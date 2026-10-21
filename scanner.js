@@ -1,5 +1,5 @@
 // סורק מסמכים מהמצלמה: מסגרת ירוקה סביב הדף, צילום, ואז חיתוך ויישור
-import { compressCanvasSource } from "./images.js?v=20261021";
+import { compressCanvasSource } from "./images.js?v=20261022";
 
 /* ---------- זיהוי הדף בתמונה קטנה ---------- */
 // שתי שיטות, והטובה מנצחת:
