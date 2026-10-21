@@ -1,6 +1,7 @@
 // זיהוי מסמכים עם Google Gemini (מכסה חינמית)
+import { askGemini, shrinkPages } from "./fastgem.js?v=20261021";
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
-const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"];
+const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
 
 const PROMPT = `You read Israeli business paperwork (Hebrew or English) for an accountant.
 Look at the page images (all pages belong to ONE document) and return ONLY a JSON object:
@@ -90,60 +91,22 @@ export function normalizeResult(r) {
 
 function safeMsg(body) { try { return (JSON.parse(body).error?.message || "").slice(0, 160); } catch { return String(body).slice(0, 160); } }
 
-const CALL_TIMEOUT = 40000; // שניות לכל ניסיון, אחר כך עוברים לדגם הבא
-async function callModel(model, key, pages, signal) {
-  const parts = [{ text: PROMPT }];
-  for (const p of pages.slice(0, 4)) parts.push({ inline_data: { mime_type: "image/jpeg", data: p.slice(p.indexOf(",") + 1) } });
-  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), CALL_TIMEOUT);
-  const stop = () => ctl.abort(); signal?.addEventListener("abort", stop);
-  let res;
-  try {
-    res = await fetch(API + encodeURIComponent(model) + ":generateContent", {
-    signal: ctl.signal,
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: "application/json", temperature: 0 } })
-  });
-  } catch (e) {
-    const err = new Error(signal?.aborted ? "skipped" : "timeout"); err.status = signal?.aborted ? "skip" : "timeout"; throw err;
-  } finally { clearTimeout(t); signal?.removeEventListener("abort", stop); }
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    const err = new Error(`Gemini ${res.status}`); err.status = res.status; err.body = body; throw err;
-  }
-  const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
-  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-  return JSON.parse(json);
-}
-
 // מחזיר {ok, result, message}
 export async function recognize(pages, settings, signal) {
   const key = (settings.geminiKey || "").trim();
   if (!key) return { ok: false, message: "לא הוגדר מפתח זיהוי, אז ממלאים ידנית. אפשר להוסיף מפתח בהגדרות." };
   const models = [settings.geminiModel || FALLBACK_MODELS[0], ...FALLBACK_MODELS].filter((m, i, a) => m && a.indexOf(m) === i);
-  let last, hitQuota = false, timeouts = 0;
-  for (const m of models) {
-    try {
-      if (signal?.aborted) break;
-      return { ok: true, result: normalizeResult(await callModel(m, key, pages, signal)), model: m };
-    } catch (e) {
-      last = e;
-      // דגם לא קיים / לא נתמך / עמוס → מנסים את הבא
-      // מכסה נגמרה (429) → לכל דגם מכסה חינמית נפרדת, אז עוברים לבא
-      if (e.status === "skip") break;
-      if (e.status === "timeout") { if (++timeouts >= 2) break; continue; }
-      if (e.status === 429) { hitQuota = true; continue; }
-      if ([404, 500, 503].includes(e.status) || (e.status === 400 && /model|not found|not supported/i.test(e.body || ""))) continue;
-      break;
-    }
-  }
+  let last, hitQuota = false;
+  try {
+    const { json, model } = await askGemini({ key, models, text: PROMPT, pages: await shrinkPages(pages), signal });
+    return { ok: true, result: normalizeResult(json), model };
+  } catch (st) { last = st.last; hitQuota = st.hitQuota; }
   const detail = last ? ` (קוד: ${last.status || last.name || "?"}${last.body ? " · " + (safeMsg(last.body)) : ""})` : "";
   let message = "הזיהוי לא הצליח, אז ממלאים ידנית." + detail;
   if (signal?.aborted) return { ok: false, message: "דילגת על הזיהוי. ממלאים ידנית." };
   if (last?.status === "timeout") message = "הזיהוי לא ענה בזמן (השרת עמוס כרגע). ממלאים ידנית, או מנסים שוב בעוד כמה דקות.";
   if (hitQuota || last?.status === 429) message = "נגמרה לעכשיו מכסת הזיהוי החינמית. ממלאים ידנית, או מנסים שוב בעוד כמה דקות. המכסה היומית מתאפסת כל יום ב-10:00 בבוקר.";
-  else if (last?.status === 400 || last?.status === 403) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית." + detail;
+  else if ((last?.status === 400 || last?.status === 403) && /API.?KEY|api key|PERMISSION/i.test(last.body || "")) message = "מפתח הזיהוי לא תקין או חסום. בדקי אותו בהגדרות. בינתיים ממלאים ידנית." + detail;
   else if (last instanceof SyntaxError) message = "התשובה מהזיהוי לא הייתה ברורה, אז ממלאים ידנית.";
   return { ok: false, message };
 }

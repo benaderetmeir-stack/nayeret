@@ -491,3 +491,6 @@ button.big-choice { font: inherit; font-weight: 700; font-size: 17px; }
 
 .alloc-warn { background: #FDECEA; color: #A93226; border: 1.5px solid #E6A19A; font-weight: 600; font-size: 14px; }
 .pill-alloc { background: #FDECEA; color: #A93226; font-weight: 700; }
+
+.ios-tip { font-size: 13px; color: var(--ink-3); text-align: center; margin: 10px 4px 0; }
+#upStart[hidden] + .ios-tip { display: none; }

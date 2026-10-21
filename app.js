@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261016";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261016";
-import { recognize } from "./ocr.js?v=20261016";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261016";
-import { getRate, curSign } from "./fx.js?v=20261016";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261016";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261016";
-import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261016";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261016";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261021";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261021";
+import { recognize } from "./ocr.js?v=20261021";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261021";
+import { getRate, curSign } from "./fx.js?v=20261021";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261021";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261021";
+import { isPayment, isPayable, isAuthority, matchPayments } from "./paymatch.js?v=20261021";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261021";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261016");
+    const { seedDemo } = await import("./demo.js?v=20261021");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -598,6 +598,7 @@ function handleFiles(files, more) {
 }
 // סריקה עם מסגרת ירוקה, ולצידה צילום רגיל (כשהסורק לא תופס טוב)
 if (scannerSupported()) { $("upScan").hidden = false; $("upScanMore").hidden = false; }
+if (/iPhone|iPad|iPod/.test(navigator.userAgent)) $("iosTip").hidden = false;
 async function doScan(nativeInputId) {
   let page;
   try { page = await scanPage({ onNative: () => $(nativeInputId).click() }); }
