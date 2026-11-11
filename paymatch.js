@@ -1,8 +1,9 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261022";
+import { supplierKey } from "./recur.js?v=20261111";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
-export const isPayment = (r) => r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
+export const isReceipt = (r) => r.kind === "other" && (r.docType || "").trim() === "קבלה";   // קבלה בלי חשבונית מס
+export const isPayment = (r) => isReceipt(r) || r.kind === "other" && /אישור תשלום|העברה בנקאית|העברת כספים/.test(r.docType || "") && !/משכורת|שכר/.test(r.docType || "");
 
 // מסמכים שמשלמים עליהם בלי חשבונית (קופות גמל, ביטוח לאומי, מס...)
 export const isPayable = (r) => r.kind === "other" && /קופות גמל|פנסיה|ביטוח לאומי|ביטוח|מס הכנסה|מע"?מ|ניכויים/.test(r.docType || "");
@@ -51,7 +52,7 @@ export function matchPayments(invoices, payments, ownName = "") {
 }
 
 // דרישת תשלום / חשבון עסקה: מחכים לחשבונית מס מאותו ספק על אותו סכום
-export const isProforma = (r) => r.kind === "other" && /דרישת תשלום|חשבון עסקה/.test(r.docType || "");
+export const isProforma = (r) => isReceipt(r) || r.kind === "other" && /דרישת תשלום|חשבון עסקה/.test(r.docType || "");
 export function findTaxInvoice(req, docs) {
   const amt = Number(req.amount); if (!(amt > 0) || !req.date) return null;
   let best = null, bestD = Infinity;

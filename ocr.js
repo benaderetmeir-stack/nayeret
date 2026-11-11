@@ -1,5 +1,5 @@
 // זיהוי מסמכים עם Google Gemini (מכסה חינמית)
-import { askGemini, shrinkPages } from "./fastgem.js?v=20261022";
+import { askGemini, shrinkPages } from "./fastgem.js?v=20261111";
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
 const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
 
@@ -18,7 +18,7 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "total": number | null,     // total including VAT, in the document's currency
   "vat": number | null,       // VAT amount
   "net": number | null,       // amount before VAT
-  "exempt": boolean,          // true if issued by "עוסק פטור" or no VAT charged
+  "exempt": boolean,          // true if issued by "עוסק פטור" or a tax invoice with no VAT charged. For a plain "קבלה": true ONLY if it says "עוסק פטור"
   "paidOnDocument": boolean,  // true if the document itself confirms payment was received: a receipt (קבלה / חשבונית מס קבלה) or a payment section (אמצעי תשלום: אשראי, מזומן, העברה, צ'ק, "שולם")
   "amount": number | null,    // for other paperwork: the main amount (net salary, transfer amount, statement balance change) or null
   "category": string,         // for invoices only, one of: "חומרים ותכשירים", "ציוד ומכשירים", "שיווק ופרסום", "שכירות ואחזקה", "חשמל, מים ועירייה", "תקשורת ומנויים", "השתלמויות", "נסיעות ורכב", "כיבוד ומשרד", "ביטוח", "משכורות", "אחר". The business is a medical-cosmetics clinic.
@@ -27,6 +27,8 @@ Look at the page images (all pages belong to ONE document) and return ONLY a JSO
   "note": string              // very short Hebrew note if something important is unclear, else ""
 }
 Rules:
+- "docType" is EXACTLY the document's own heading as printed: a document headed only "קבלה" is "קבלה" (never "חשבונית מס קבלה"); use "חשבונית מס קבלה" only when the heading says both (e.g. "חשבונית מס / קבלה").
+- A plain "קבלה" (receipt only, no tax invoice in the heading) from a VAT-registered dealer (עוסק מורשה / חברה בע"מ) is NOT an invoice: it only confirms a payment, the tax invoice comes separately. Return it as "other" with docType "קבלה", name = the supplier, amount = the total paid. Set "exempt": true ONLY if the document says "עוסק פטור".
 - "invoice" = supplier invoices and receipts the business RECEIVED (חשבונית, חשבונית מס, קבלה, חשבונית מס קבלה, חשבונית זיכוי), including a plain receipt (קבלה) from a VAT-exempt dealer (עוסק פטור), which is the only document such a dealer issues.
 - Any document issued by a business that shows an amount paid for goods or services counts as "invoice". When unsure between the two, choose "invoice".
 - EXCEPTION: a payment request is NOT an invoice: "דרישת תשלום", "חשבון עסקה", "חשבון עסקה / דרישת תשלום", "הצעת מחיר", "פרופורמה" / "proforma", or a document that says it is not a tax invoice ("אינו חשבונית מס" / "אין לראות במסמך זה חשבונית מס"). These are "other" with docType "דרישת תשלום", "חשבון עסקה" or "הצעת מחיר", name = the supplier who issued it, amount = the total to pay.
@@ -88,7 +90,11 @@ export function normalizeResult(r) {
   if (out.exempt) { out.vat = 0; if (out.total != null) out.net = out.total; }
   if (out.total != null && out.vat != null && out.net == null) out.net = Math.round((out.total - out.vat) * 100) / 100;
   // דרישת תשלום / חשבון עסקה / הצעת מחיר: אף פעם לא חשבונית (לא נכנסת לסכומי החשבוניות והמע"מ)
-  if (PROFORMA_RE.test(out.docType) && !/חשבונית/.test(out.docType)) {
+  // קבלה רגילה (לא "חשבונית מס קבלה") מעוסק מורשה: רק אישור תשלום. חשבונית המס תגיע בנפרד
+  const plainReceipt = /^קבלה(\s|$|\s*מס['׳]?)/.test(out.docType) && !/חשבונית/.test(out.docType);
+  if (plainReceipt && !out.exempt) { out.kind = "other"; out.docType = "קבלה"; }
+  else if (plainReceipt && out.exempt) out.kind = "invoice";   // עוסק פטור: הקבלה היא המסמך היחיד שלו
+  if (PROFORMA_RE.test(out.docType) && !/חשבונית/.test(out.docType) || out.kind === "other" && out.docType === "קבלה") {
     out.kind = "other";
     if (out.amount == null) out.amount = out.total;
   }

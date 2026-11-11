@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261022";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261022";
-import { recognize } from "./ocr.js?v=20261022";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261022";
-import { getRate, curSign } from "./fx.js?v=20261022";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261022";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261022";
-import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice } from "./paymatch.js?v=20261022";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261022";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261111";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261111";
+import { recognize } from "./ocr.js?v=20261111";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261111";
+import { getRate, curSign } from "./fx.js?v=20261111";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261111";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261111";
+import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt } from "./paymatch.js?v=20261111";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261111";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261022");
+    const { seedDemo } = await import("./demo.js?v=20261111");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -317,7 +317,7 @@ const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על
 const waitMark = (r) => {
   if (!isProforma(r) || r.gotInvoice) return "";
   const inv = state.payAround && findTaxInvoice(r, state.payAround);
-  if (inv) return "";
+  if (inv || state.payMatch?.get(r.id)?.kind === "invoice") return "";
   return `<button type="button" class="pill pill-wait" data-wait title="עדיין לא הועלתה חשבונית מס מ${esc(r.name || "הספק")} על הסכום הזה · לחיצה מסמנת שהתקבלה">ממתין לחשבונית מס</button> `;
 };
 const allocMark = (r) => missingAllocation(r) ? `<span class="pill pill-alloc" title="חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ בלי מספר הקצאה: אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית עם מספר הקצאה">חסר מס' הקצאה</span> ` : "";
@@ -325,7 +325,7 @@ function payMark(r) {
   const m = state.payMatch?.get(r.id);
   if (isTarget(r)) {
     const on = !!m || !!r.paid || !!r.receipt;
-    const title = m ? `שולם · אישור תשלום מ-${fmtDate(m.date)}` : r.receipt ? "שולמה · חשבונית מס קבלה (התשלום מופיע במסמך)" : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
+    const title = m ? `שולם · ${isReceipt(m) ? "קבלה" : "אישור תשלום"} מ-${fmtDate(m.date)}` : r.receipt ? "שולמה · חשבונית מס קבלה (התשלום מופיע במסמך)" : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
     return `<button type="button" class="pay-mark${on ? " is-on" : ""}" data-pay title="${title}" aria-label="${title}">✓</button>`;
   }
   if (!isPayment(r)) return "";
@@ -333,7 +333,7 @@ function payMark(r) {
     const title = m ? (m.kind === "invoice" ? `יש חשבונית: ${m.supplier || ""} מ-${fmtDate(m.date)}` : `שולם עבור ${m.docType || "מסמך"} מ-${fmtDate(m.date)}`) : "סומן שיש חשבונית (לחיצה מבטלת)";
     return `<button type="button" class="pay-mark is-on" data-pay title="${esc(title)}" aria-label="${esc(title)}">✓</button>`;
   }
-  if (isAuthority(r)) return "";   // תשלום לרשות / לקרן: אין חשבונית
+  if (isAuthority(r) || isReceipt(r)) return "";   // תשלום לרשות / לקרן: אין חשבונית. קבלה: "ממתין לחשבונית מס" מספיק
   return `<button type="button" class="pay-mark is-missing" data-pay title="לא נמצאה חשבונית לתשלום הזה · לחיצה מסמנת שיש" aria-label="חסרה חשבונית">חסרה חשבונית</button>`;
 }
 async function markGotInvoice(row) {
