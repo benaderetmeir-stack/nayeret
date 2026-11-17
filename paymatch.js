@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261111";
+import { supplierKey } from "./recur.js?v=20261117";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isReceipt = (r) => r.kind === "other" && (r.docType || "").trim() === "קבלה";   // קבלה בלי חשבונית מס

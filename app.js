@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261111";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261111";
-import { recognize } from "./ocr.js?v=20261111";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261111";
-import { getRate, curSign } from "./fx.js?v=20261111";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261111";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261111";
-import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt } from "./paymatch.js?v=20261111";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261111";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261117";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261117";
+import { recognize } from "./ocr.js?v=20261117";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261117";
+import { getRate, curSign } from "./fx.js?v=20261117";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261117";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261117";
+import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt } from "./paymatch.js?v=20261117";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261117";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261111");
+    const { seedDemo } = await import("./demo.js?v=20261117");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -1247,7 +1247,7 @@ function readReportForm() {
     by: document.querySelector('input[name="rBy"]:checked').value,
     month: $("rMonth").value, from: $("rFrom").value, to: $("rTo").value,
     monthFrom: $("rMonthFrom").value, monthTo: $("rMonthTo").value,
-    outputs: ["combined", "table", "docs", "excel"].filter((k) => $({ combined: "oCombined", table: "oTable", docs: "oDocs", excel: "oExcel" }[k]).checked)
+    outputs: ["combined", "table", "docs", "excel", "zip"].filter((k) => $({ combined: "oCombined", table: "oTable", docs: "oDocs", excel: "oExcel", zip: "oZip" }[k]).checked)
   };
 }
 const kindsOf = (h) => h.kinds || (h.kind ? [h.kind] : KINDS);
@@ -1278,7 +1278,7 @@ async function runReport(p) {
   const withRows = sections.filter((s) => s.rows.length);
   if (!withRows.length) { $("rResult").hidden = true; return toast("אין מסמכים בטווח הזה"); }
   const empty = sections.filter((s) => !s.rows.length).map((s) => KIND_LABEL[s.kind]);
-  const ok = await generate(withRows, { period, fileTag: tag, outputs: { combined: p.outputs.includes("combined"), table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
+  const ok = await generate(withRows, { period, fileTag: tag, outputs: { combined: p.outputs.includes("combined"), table: p.outputs.includes("table"), docs: p.outputs.includes("docs"), excel: p.outputs.includes("excel"), zip: p.outputs.includes("zip") }, note: empty.length ? `אין ${empty.join(" ו")} בטווח הזה.` : "" });
   if (ok && (p.by === "month" || p.by === "months")) {
     const cur = ymOf(new Date());
     const ms = p.by === "month" ? [p.month] : (() => { const a = []; for (let m = p.monthFrom; m <= p.monthTo && a.length < 36; m = shiftMonth(m, 1)) a.push(m); return a; })();
@@ -1288,6 +1288,29 @@ async function runReport(p) {
     }
   }
 
+}
+
+/* ---------- ZIP: כל מסמך כקובץ PDF נקי, תיקייה לכל סוג, מספור כמו בטבלה ---------- */
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("לא הצלחתי לטעון את רכיב ה-ZIP. בדקי חיבור ונסי שוב.")); document.head.appendChild(s); });
+}
+async function buildZip(sections, btn) {
+  if (!window.JSZip) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+  const zip = new window.JSZip();
+  for (const { kind, rows } of sections) {
+    const dir = zip.folder(KIND_LABEL[kind]), w = String(rows.length).length > 1 ? String(rows.length).length : 2;
+    const used = new Set();
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      btn.textContent = `ZIP · ${KIND_LABEL[kind]}: ${i + 1} מתוך ${rows.length}…`; $("rResultInfo").textContent = `מכין ZIP: ${KIND_LABEL[kind]} ${i + 1} מתוך ${rows.length}…`;
+      const who = kind === "invoice" ? (r.supplier || "ספק") : [r.docType, r.name].filter(Boolean).join(" - ") || "מסמך";
+      const amt = kind === "invoice" ? r.total : r.amount;
+      let name = safeName([String(i + 1).padStart(w, "0"), r.date || "", who.replace(/"/g, "״").slice(0, 50), amt != null ? String(Math.round(amt * 100) / 100) : ""].filter(Boolean).join(" - "));
+      while (used.has(name)) name += "_"; used.add(name);
+      dir.file(`${name}.pdf`, await buildDocsPdf([r], kind, (id) => state.store.getPages(id), null, { stamp: false }));
+    }
+  }
+  return zip.generateAsync({ type: "blob", compression: "STORE" });   // PDF כבר דחוס
 }
 
 // sections: [{kind, rows}]
@@ -1318,6 +1341,7 @@ async function generate(sections, { period, fileTag, outputs, note = "" }) {
       const lbl = sections.map((s) => KIND_LABEL[s.kind]).join(" + ");
       files.push({ name: safeName(`${sections.length > 1 ? "ניירת לרואה חשבון" : lbl} ${fileTag} (${stamp}).xlsx`), blob: await buildExcel(sections, { subtitle: period, bizName, summary }), label: sections.length > 1 ? "אקסל עם גיליון לכל סוג וסיכום קטגוריות" : "טבלה באקסל + סיכום קטגוריות" });
     }
+    if (outputs.zip) files.push({ name: safeName(`ניירת עסק ${fileTag}.zip`), label: "כל מסמך כקובץ PDF נפרד, בלי כותרת: תיקייה לכל סוג", blob: await buildZip(sections, btn) });
   } catch (e) {
     console.error(e); toast("ההפקה נכשלה: " + (e.message || e), 5000);
     $("rResultInfo").textContent = "ההפקה נכשלה. נסי שוב."; btn.disabled = false; btn.textContent = "הפק קבצים"; return false;
