@@ -1297,11 +1297,15 @@ function loadScript(src) {
 async function buildZip(sections, btn) {
   if (!window.JSZip) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
   const zip = new window.JSZip();
+  // כמה חודשים: תיקייה לכל חודש (כמו בדרייב), ובתוכה תיקייה לכל סוג. המספור רץ כמו בטבלה
+  const months = [...new Set(sections.flatMap((s) => s.rows.map((r) => r.month || "")))].filter(Boolean);
+  const multi = months.length > 1;
   for (const { kind, rows } of sections) {
-    const dir = zip.folder(KIND_LABEL[kind]), w = String(rows.length).length > 1 ? String(rows.length).length : 2;
+    const w = Math.max(2, String(rows.length).length);
     const used = new Set();
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
+      const dir = zip.folder(multi ? `ניירת עסק ${r.month || "ללא חודש"}/${KIND_LABEL[kind]}` : KIND_LABEL[kind]);
       btn.textContent = `ZIP · ${KIND_LABEL[kind]}: ${i + 1} מתוך ${rows.length}…`; $("rResultInfo").textContent = `מכין ZIP: ${KIND_LABEL[kind]} ${i + 1} מתוך ${rows.length}…`;
       const who = kind === "invoice" ? (r.supplier || "ספק") : [r.docType, r.name].filter(Boolean).join(" - ") || "מסמך";
       const amt = kind === "invoice" ? r.total : r.amount;
