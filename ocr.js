@@ -1,5 +1,5 @@
 // זיהוי מסמכים עם Google Gemini (מכסה חינמית)
-import { askGemini, shrinkPages } from "./fastgem.js?v=20261117";
+import { askGemini, shrinkPages } from "./fastgem.js?v=20261122";
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
 const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
 

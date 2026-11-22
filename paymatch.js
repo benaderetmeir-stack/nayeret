@@ -1,5 +1,5 @@
 // התאמה בין חשבוניות לאישורי תשלום: אותו סכום, שם ספק דומה, תאריכים קרובים
-import { supplierKey } from "./recur.js?v=20261117";
+import { supplierKey } from "./recur.js?v=20261122";
 
 // אישור תשלום לספק (לא משכורת, לא דף בנק)
 export const isReceipt = (r) => r.kind === "other" && (r.docType || "").trim() === "קבלה";   // קבלה בלי חשבונית מס
@@ -13,7 +13,7 @@ const targetAmount = (t) => Number(t.kind === "invoice" ? t.total : t.amount);
 const targetName = (t) => t.kind === "invoice" ? t.supplier : (t.name || "");
 const MAX_DAYS = 75;
 const days = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
-function nameScore(a, b) {
+export function nameScore(a, b) {
   const A = new Set(supplierKey(a).split(" ").filter(Boolean)), B = new Set(supplierKey(b).split(" ").filter(Boolean));
   if (!A.size || !B.size) return null;   // אין שם להשוואה
   let both = 0; for (const t of A) if (B.has(t)) both++;

@@ -1,5 +1,5 @@
 // נתונים לדוגמה למצב תצוגה בלבד. שמות העסקים בדויים.
-import { makeThumb } from "./images.js?v=20261117";
+import { makeThumb } from "./images.js?v=20261122";
 
 function receipt({ title, sub, lines, total, vat, no, date, exempt, kind }) {
   const W = 620, H = 860;

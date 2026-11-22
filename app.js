@@ -1,13 +1,13 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261117";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261117";
-import { recognize } from "./ocr.js?v=20261117";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261117";
-import { getRate, curSign } from "./fx.js?v=20261117";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261117";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261117";
-import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt } from "./paymatch.js?v=20261117";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261117";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261122";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261122";
+import { recognize } from "./ocr.js?v=20261122";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261122";
+import { getRate, curSign } from "./fx.js?v=20261122";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261122";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261122";
+import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt, nameScore } from "./paymatch.js?v=20261122";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261122";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -158,7 +158,7 @@ async function boot() {
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261117");
+    const { seedDemo } = await import("./demo.js?v=20261122");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -314,18 +314,25 @@ async function refreshPayMarks(rows) {
 const isTarget = (r) => r.kind === "invoice" || isPayable(r);   // משהו שמשלמים עליו
 const targetDesc = (t) => t.kind === "invoice" ? `לחשבונית של ${t.supplier || "הספק"} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.total)}` : `ל${t.docType || "מסמך"}${t.name ? ` (${t.name})` : ""} מ-${fmtDate(t.date)} על ₪${fmtMoney(t.amount)}`;
 const paymentDesc = (p) => `לאישור התשלום מ-${fmtDate(p.date)} על ₪${fmtMoney(p.amount)}${p.name ? ` (${p.name})` : ""}`;
+// כמה כבר התקבל בחשבוניות שקושרו ידנית (למשל 4 חשבוניות על קבלה אחת)
+const linkedSum = (r) => (r.linked || []).reduce((s, x) => s + (Number(x.total) || 0), 0);
 const waitMark = (r) => {
   if (!isProforma(r) || r.gotInvoice) return "";
-  const inv = state.payAround && findTaxInvoice(r, state.payAround);
-  if (inv || state.payMatch?.get(r.id)?.kind === "invoice") return "";
-  return `<button type="button" class="pill pill-wait" data-wait title="עדיין לא הועלתה חשבונית מס מ${esc(r.name || "הספק")} על הסכום הזה · לחיצה מסמנת שהתקבלה">ממתין לחשבונית מס</button> `;
+  const got = linkedSum(r), amt = Number(r.amount) || 0;
+  if (got && got >= amt - 1) return "";
+  if (!got) {
+    const inv = state.payAround && findTaxInvoice(r, state.payAround);
+    if (inv || state.payMatch?.get(r.id)?.kind === "invoice") return "";
+  }
+  const txt = got ? `ממתין לחשבונית מס · התקבלו ₪${fmtMoney(got)} מתוך ₪${fmtMoney(amt)}` : "ממתין לחשבונית מס";
+  return `<button type="button" class="pill pill-wait" data-wait title="לחיצה: לבחור את החשבוניות ששייכות ל${esc(r.docType || "מסמך")} הזה">${txt}</button> `;
 };
 const allocMark = (r) => missingAllocation(r) ? `<span class="pill pill-alloc" title="חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ בלי מספר הקצאה: אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית עם מספר הקצאה">חסר מס' הקצאה</span> ` : "";
 function payMark(r) {
   const m = state.payMatch?.get(r.id);
   if (isTarget(r)) {
-    const on = !!m || !!r.paid || !!r.receipt;
-    const title = m ? `שולם · ${isReceipt(m) ? "קבלה" : "אישור תשלום"} מ-${fmtDate(m.date)}` : r.receipt ? "שולמה · חשבונית מס קבלה (התשלום מופיע במסמך)" : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
+    const on = !!m || !!r.paid || !!r.receipt || !!r.paidBy;
+    const title = m ? `שולם · ${isReceipt(m) ? "קבלה" : "אישור תשלום"} מ-${fmtDate(m.date)}` : r.paidBy ? `שולם · ${r.paidBy.docType || "קבלה"} מ-${fmtDate(r.paidBy.date)}` : r.receipt ? "שולמה · חשבונית מס קבלה (התשלום מופיע במסמך)" : r.paid ? "סומן ששולם (לחיצה מבטלת)" : "לא נמצא אישור תשלום · לחיצה מסמנת ששולם";
     return `<button type="button" class="pay-mark${on ? " is-on" : ""}" data-pay title="${title}" aria-label="${title}">✓</button>`;
   }
   if (!isPayment(r)) return "";
@@ -336,6 +343,49 @@ function payMark(r) {
   if (isAuthority(r) || isReceipt(r)) return "";   // תשלום לרשות / לקרן: אין חשבונית. קבלה: "ממתין לחשבונית מס" מספיק
   return `<button type="button" class="pay-mark is-missing" data-pay title="לא נמצאה חשבונית לתשלום הזה · לחיצה מסמנת שיש" aria-label="חסרה חשבונית">חסרה חשבונית</button>`;
 }
+/* ---- קישור ידני: אילו חשבוניות שייכות לקבלה / דרישת תשלום ---- */
+const dayShift = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return localIso(d); };
+let linkRow = null, linkCands = [];
+async function openLinkDlg(row) {
+  linkRow = row;
+  $("lkTitle").textContent = `${row.docType || "מסמך"} · ${row.name || ""} · ₪${fmtMoney(row.amount || 0)}`;
+  $("lkList").innerHTML = `<li class="hint">טוען…</li>`; $("linkDlg").showModal();
+  let all = [];
+  try { all = await state.store.listByRange(dayShift(row.date || localIso(new Date()), -30), dayShift(row.date || localIso(new Date()), 365)); } catch (e) { console.error(e); }
+  const inv = all.filter((x) => x.kind === "invoice");
+  const who = row.name || row.supplier || "";
+  const same = inv.filter((x) => { const s = nameScore(who, x.supplier || ""); return s === null || s >= 0.5; });
+  const mine = new Set((row.linked || []).map((x) => x.id));
+  linkCands = (same.length ? same : inv).filter((x) => !x.paidBy || x.paidBy.id === row.id || mine.has(x.id)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  $("lkHint").textContent = same.length ? `חשבוניות מ${who} מהתקופה שאחרי ה${row.docType || "מסמך"}:` : `לא מצאתי חשבוניות מ${who}. אלה כל החשבוניות מהתקופה:`;
+  $("lkList").innerHTML = linkCands.length ? linkCands.map((x) => `<li><label class="check"><input type="checkbox" data-lk="${x.id}"${mine.has(x.id) ? " checked" : ""}><span>${fmtDate(x.date)} · ${esc(x.supplier || "")} · ₪${fmtMoney(x.total || 0)}${x.invoiceNumber ? ` · מס' ${esc(x.invoiceNumber)}` : ""}</span></label></li>`).join("") : `<li class="hint">אין עדיין חשבוניות בתקופה הזו. כשיגיעו, לוחצים שוב על הסימון.</li>`;
+  updateLinkSum();
+}
+function updateLinkSum() {
+  const ids = [...$("lkList").querySelectorAll("[data-lk]:checked")].map((c) => c.dataset.lk);
+  const sum = linkCands.filter((x) => ids.includes(x.id)).reduce((s, x) => s + (Number(x.total) || 0), 0);
+  const amt = Number(linkRow.amount) || 0;
+  $("lkSum").textContent = `נבחרו ₪${fmtMoney(sum)} מתוך ₪${fmtMoney(amt)}${sum >= amt - 1 && amt ? " ✓ הסכום המלא" : ""}`;
+}
+$("lkList").addEventListener("change", updateLinkSum);
+$("lkSave").onclick = async () => {
+  const row = linkRow, ids = new Set([...$("lkList").querySelectorAll("[data-lk]:checked")].map((c) => c.dataset.lk));
+  const before = new Set((row.linked || []).map((x) => x.id));
+  const linked = linkCands.filter((x) => ids.has(x.id)).map((x) => ({ id: x.id, total: Number(x.total) || 0, date: x.date || "" }));
+  const paidBy = { id: row.id, date: row.date || "", docType: row.docType || "קבלה" };
+  try {
+    await state.store.updateDoc(row.id, { linked });
+    for (const x of linkCands) {
+      if (ids.has(x.id) && !before.has(x.id)) { await state.store.updateDoc(x.id, { paidBy }); x.paidBy = paidBy; }
+      if (!ids.has(x.id) && before.has(x.id)) { await state.store.updateDoc(x.id, { paidBy: null }); x.paidBy = null; }
+    }
+    row.linked = linked;
+    for (const r of state.rows || []) { const c = linkCands.find((x) => x.id === r.id); if (c) r.paidBy = c.paidBy; }
+    $("linkDlg").close(); toast("נשמר"); renderTable();
+  } catch (e) { console.error(e); toast("השמירה נכשלה, נסי שוב"); }
+};
+$("lkFull").onclick = async () => { $("linkDlg").close(); await markGotInvoice(linkRow); };
+$("lkCancel").onclick = () => $("linkDlg").close();
 async function markGotInvoice(row) {
   if (!(await confirmBox(`לסמן שהתקבלה חשבונית מס עבור ה${row.docType || "מסמך"} הזה?\nבדרך כלל זה נעלם לבד כשמעלים את החשבונית.`, "כן, התקבלה", false))) return;
   row.gotInvoice = true;
@@ -440,7 +490,7 @@ function onListClick(e) {
   if (e.target.classList.contains("rowSel")) { e.target.checked ? state.selected.add(row.id) : state.selected.delete(row.id); host.classList.toggle("is-selected", e.target.checked); renderSelection(); return; }
   if (e.target.closest("[data-del]")) { deleteRow(row); return; }
   if (e.target.closest("[data-pay]")) { togglePay(row); return; }
-  if (e.target.closest("[data-wait]")) { markGotInvoice(row); return; }
+  if (e.target.closest("[data-wait]")) { openLinkDlg(row); return; }
   if (e.target.closest("[data-open]")) openViewer(row);
 }
 $("docTbody").addEventListener("click", onListClick);
