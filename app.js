@@ -186,7 +186,7 @@ async function enterApp() {
   loadRecur(); loadPrices();
   setView(location.hash.replace("#", "") || "invoice");
   refreshUsage();
-  refreshInbox();
+  refreshInbox(); refreshOpen();
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshInbox(); });
 }
 
@@ -324,7 +324,7 @@ const waitMark = (r) => {
     const inv = state.payAround && findTaxInvoice(r, state.payAround);
     if (inv || state.payMatch?.get(r.id)?.kind === "invoice") return "";
   }
-  const txt = got ? `ממתין לחשבונית מס · התקבלו ₪${fmtMoney(got)} מתוך ₪${fmtMoney(amt)}` : "ממתין לחשבונית מס";
+  const txt = got ? `ממתין לחשבונית · חסר ₪${fmtMoney(Math.max(0, amt - got))}` : "ממתין לחשבונית מס";
   return `<button type="button" class="pill pill-wait" data-wait title="לחיצה: לבחור את החשבוניות ששייכות ל${esc(r.docType || "מסמך")} הזה">${txt}</button> `;
 };
 const allocMark = (r) => missingAllocation(r) ? `<span class="pill pill-alloc" title="חשבונית מעל ₪${allocThreshold(r.date).toLocaleString("he-IL")} לפני מע"מ בלי מספר הקצאה: אי אפשר לקזז את המע"מ. כדאי לבקש מהספק חשבונית עם מספר הקצאה">חסר מס' הקצאה</span> ` : "";
@@ -381,7 +381,7 @@ $("lkSave").onclick = async () => {
     }
     row.linked = linked;
     for (const r of state.rows || []) { const c = linkCands.find((x) => x.id === r.id); if (c) r.paidBy = c.paidBy; }
-    $("linkDlg").close(); toast("נשמר"); renderTable();
+    $("linkDlg").close(); toast("נשמר"); renderTable(); refreshOpen();
   } catch (e) { console.error(e); toast("השמירה נכשלה, נסי שוב"); }
 };
 $("lkFull").onclick = async () => { $("linkDlg").close(); await markGotInvoice(linkRow); };
@@ -390,7 +390,64 @@ async function markGotInvoice(row) {
   if (!(await confirmBox(`לסמן שהתקבלה חשבונית מס עבור ה${row.docType || "מסמך"} הזה?\nבדרך כלל זה נעלם לבד כשמעלים את החשבונית.`, "כן, התקבלה", false))) return;
   row.gotInvoice = true;
   try { await state.store.updateDoc(row.id, { gotInvoice: true }); toast("סומן"); } catch (e) { console.error(e); toast("השמירה נכשלה, נסי שוב"); }
-  renderTable();
+  renderTable(); refreshOpen();
+}
+
+/* ---- קבלות / דרישות תשלום שעדיין מחכות לחשבונית מס (שנה אחורה) ---- */
+let openItems = [];
+const remainingOf = (r) => Math.max(0, (Number(r.amount) || 0) - linkedSum(r));
+// מסמך שנמחק: מנקים את הקישור שלו (חשבונית שנמחקה יוצאת מהקבלה, קבלה שנמחקה מורידה את ה-✓ מהחשבוניות)
+async function healLinks(all, from) {
+  const ids = new Set(all.map((r) => r.id)), byId = new Map(all.map((r) => [r.id, r]));
+  let changed = false;
+  for (const r of all) {
+    if (r.linked?.length) {
+      const keep = r.linked.filter((x) => ids.has(x.id) || (x.date && x.date < from));
+      if (keep.length !== r.linked.length) { r.linked = keep; changed = true; await state.store.updateDoc(r.id, { linked: keep }).catch((e) => console.warn(e)); }
+    }
+    if (r.paidBy?.id && !byId.has(r.paidBy.id) && (r.paidBy.date || "") >= from) { r.paidBy = null; changed = true; await state.store.updateDoc(r.id, { paidBy: null }).catch((e) => console.warn(e)); }
+  }
+  return changed;
+}
+async function listOpen(around) {
+  const from = dayShift(localIso(new Date()), -365);
+  const all = around || await state.store.listByRange(from, dayShift(localIso(new Date()), 400));
+  if (!around && await healLinks(all, from)) loadRows();
+  return all.filter((r) => isProforma(r) && !r.gotInvoice && remainingOf(r) > 1 && (linkedSum(r) || !findTaxInvoice(r, all)))
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+}
+async function refreshOpen() {
+  try { openItems = await listOpen(); } catch (e) { console.warn("open", e); openItems = []; }
+  const n = openItems.length, b = $("openBar");
+  b.hidden = !n;
+  b.textContent = n === 1 ? `📎 ${openItems[0].docType || "מסמך"} אחד ממתין לחשבונית מס · ${openItems[0].name || ""}` : `📎 ${n} מסמכים ממתינים לחשבונית מס`;
+}
+$("openBar").onclick = () => {
+  $("openList").innerHTML = openItems.map((r, i) => `<li><button type="button" class="at-item" data-open="${i}"><b>${esc(r.docType || "מסמך")} · ${esc(r.name || "")}</b><span class="hint">${fmtDate(r.date)} · ₪${fmtMoney(r.amount || 0)}${linkedSum(r) ? ` · חסר ₪${fmtMoney(remainingOf(r))}` : ""}</span></button></li>`).join("");
+  $("openDlg").showModal();
+};
+$("openList").addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (!b) return; $("openDlg").close(); openLinkDlg(openItems[Number(b.dataset.open)]); });
+$("openClose").onclick = () => $("openDlg").close();
+// חשבונית חדשה מספק שיש לו קבלה פתוחה: שואלים מיד אם לשייך
+async function offerLinkFor(id, meta) {
+  if (meta.kind !== "invoice" || !id) return;
+  let open = [];
+  try { open = await listOpen(); } catch (e) { return; }
+  const total = Number(meta.total) || 0;
+  const r = open.find((o) => { const s = nameScore(o.name || o.supplier || "", meta.supplier || ""); return s !== null && s >= 0.5 && (o.date || "") <= dayShift(meta.date || localIso(new Date()), 15); });
+  if (!r) return;
+  if (!linkedSum(r) && Math.abs(total - (Number(r.amount) || 0)) <= 1) return;   // אותו סכום בדיוק: מתחבר לבד
+  const got = linkedSum(r);
+  const ok = await confirmBox(`יש ${r.docType || "קבלה"} פתוחה מ${r.name || "הספק"} על ₪${fmtMoney(r.amount || 0)}${got ? ` (התקבלו עד עכשיו ₪${fmtMoney(got)})` : ""}.\nהחשבונית הזו (₪${fmtMoney(total)}) שייכת אליה?`, "כן, לשייך", false, "לא");
+  if (!ok) return;
+  const linked = [...(r.linked || []), { id, total, date: meta.date || "" }];
+  const paidBy = { id: r.id, date: r.date || "", docType: r.docType || "קבלה" };
+  try {
+    await state.store.updateDoc(r.id, { linked }); await state.store.updateDoc(id, { paidBy });
+    const left = (Number(r.amount) || 0) - linked.reduce((s, x) => s + x.total, 0);
+    toast(left > 1 ? `שויך. חסר עוד ₪${fmtMoney(left)}` : `שויך. ה${r.docType || "קבלה"} סגורה ✓`, 4000);
+    loadRows(); refreshOpen();
+  } catch (e) { console.error(e); toast("השיוך נכשל, נסי שוב"); }
 }
 async function togglePay(row) {
   const m = state.payMatch?.get(row.id);
@@ -514,7 +571,7 @@ $("selDelete").onclick = async () => {
   const done = await deleteMany(rows, (i, n) => toast(`מוחק ${i} מתוך ${n}…`, 1500));
   state.selected.clear();
   toast(done === rows.length ? `נמחקו ${done} מסמכים` : `נמחקו ${done} מתוך ${rows.length}. נסי שוב את השאר.`, 4000);
-  refreshUsage(); await loadRows();
+  refreshUsage(); await loadRows(); refreshOpen();
 };
 async function deleteMany(rows, onProgress) {
   let done = 0;
@@ -539,7 +596,7 @@ async function deleteRow(row) {
   state.selected.delete(row.id);
   refreshUsage();
   toast("נמחק");
-  await loadRows();
+  await loadRows(); refreshOpen();
 }
 
 /* ---------- חיפוש ---------- */
@@ -1051,9 +1108,11 @@ $("upReview").addEventListener("submit", async (e) => {
       toast("הפרטים עודכנו");
     } else {
       meta.thumb = await makeThumb(up.pages[0]);
-      await state.store.addDoc(meta, up.pages);
+      const newId = await state.store.addDoc(meta, up.pages);
       refreshUsage();
       toast(`נשמר בתיקיית ${monthName(month)}${meta.late ? " (באיחור)" : ""}`);
+      await offerLinkFor(newId, meta);
+      if (isProforma(meta)) refreshOpen();
     }
     state.month = month;
     if (state.view !== kind && !up.queue.length) setView(kind); else loadRows();
@@ -1191,7 +1250,7 @@ async function saveBatch() {
       btn.textContent = `שומר ${saved + 1} מתוך ${todo.length}…`;
       rememberMeta(meta);
       meta.thumb = await makeThumb(d.pages[0]);
-      await state.store.addDoc(meta, d.pages);
+      d.newId = await state.store.addDoc(meta, d.pages); d.meta = meta;
       d.saved = true; saved++; lastMonth = meta.month; lastKind = meta.kind;
     }
   } catch (err) {
@@ -1202,6 +1261,8 @@ async function saveBatch() {
   btn.disabled = false;
   refreshUsage();
   toast(`נשמרו ${saved} מסמכים`);
+  for (const { d } of todo) if (d.newId) await offerLinkFor(d.newId, d.meta);
+  refreshOpen();
   state.month = lastMonth;
   up.batch = null; renderBatchNav();
   if (state.view !== lastKind) setView(lastKind); else loadRows();

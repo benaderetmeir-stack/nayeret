@@ -497,3 +497,8 @@ button.big-choice { font: inherit; font-weight: 700; font-size: 17px; }
 .pill-wait { background: #FFF4EA; color: #B4590F; border: 1px solid #F0B07A; font-family: inherit; cursor: pointer; padding: 1px 8px; font-size: 11px; }
 .lk-list { list-style: none; margin: 8px 0; padding: 0; max-height: 45vh; overflow-y: auto; display: grid; gap: 4px; }
 .lk-sum { font-weight: 700; margin: 6px 0 12px; }
+.open-bar { display: block; width: 100%; border: 0; border-bottom: 1px solid #F0B07A; background: #FFF4EA; color: #B4590F; text-align: center; font: inherit; font-weight: 700; font-size: 14px; padding: 7px 16px; cursor: pointer; }
+.open-bar:hover { background: #FFE9D6; }
+.pill-wait { white-space: normal; display: inline-block; max-width: 100%; line-height: 1.4; text-align: start; }
+.at-item { width: 100%; text-align: start; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid #E3E8EC; border-radius: 10px; background: #fff; font: inherit; cursor: pointer; }
+.at-item:hover { border-color: #0E9AA7; }

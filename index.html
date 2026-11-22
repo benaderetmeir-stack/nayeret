@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Rubik:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261122">
+<link rel="stylesheet" href="style.css?v=202611223">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230FA3B1'/%3E%3Cpath d='M20 14h18l8 8v28H20z' fill='%23fff'/%3E%3Cpath d='M26 32h14M26 38h14M26 44h9' stroke='%230E6A8C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -58,6 +58,7 @@
     <div class="demo-banner" id="demoBanner" hidden>מצב תצוגה: הנתונים כאן לדוגמה בלבד ולא נשמרים</div>
     <button class="usage-banner" id="usageBanner" hidden></button>
     <button class="inbox-banner" id="inboxBanner" hidden></button>
+    <button class="open-bar" id="openBar" hidden></button>
   </header>
 
   <main class="main">
@@ -443,6 +444,13 @@
 </dialog>
 
 <!-- ===== אישור ===== -->
+<dialog id="openDlg" class="dlg dlg-small">
+  <h2 class="panel-title">ממתינים לחשבונית מס</h2>
+  <p class="hint">לחיצה על מסמך פותחת את בחירת החשבוניות ששייכות אליו.</p>
+  <ul class="lk-list" id="openList"></ul>
+  <div class="row-actions"><button class="btn btn-ghost" id="openClose">סגירה</button></div>
+</dialog>
+
 <dialog id="linkDlg" class="dlg dlg-small">
   <h2 class="panel-title">אילו חשבוניות שייכות לזה?</h2>
   <p class="hint" id="lkTitle"></p>
@@ -486,6 +494,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="config.js"></script>
-<script type="module" src="app.js?v=202611222"></script>
+<script type="module" src="app.js?v=202611224"></script>
 </body>
 </html>
