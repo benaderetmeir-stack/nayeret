@@ -32,6 +32,9 @@ window.NAYERET_CONFIG = {
   // מזהה העסק. כרגע עסק אחד; מוכן להוספת עסקים בעתיד.
   businessId: "nayeret",
 
+  // כניסה עם גוגל לעסקים אחרים (חברים): המסמכים שלהם נשמרים בגוגל דרייב שלהם. אותו חיבור כמו בניירת בית
+  googleClientId: "12673821094-t9kc2k32rnt7aikpj2on4av8l2sbf3l3.apps.googleusercontent.com",
+
   // (לא חובה) מפתח reCAPTCHA Enterprise להפעלת App Check, כמו במשמרות
   appCheckSiteKey: ""
 };

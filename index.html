@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Rubik:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=202611223">
+<link rel="stylesheet" href="style.css?v=202611253">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230FA3B1'/%3E%3Cpath d='M20 14h18l8 8v28H20z' fill='%23fff'/%3E%3Cpath d='M26 32h14M26 38h14M26 44h9' stroke='%230E6A8C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -25,7 +25,7 @@
       <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="currentColor"/><path d="M20 14h18l8 8v28H20z" fill="#fff"/><path d="M26 32h14M26 38h14M26 44h9" stroke="#0E6A8C" stroke-width="3" stroke-linecap="round"/></svg>
     </div>
     <h1 class="login-title">ניירת לרואה חשבון</h1>
-    <p class="login-sub" id="loginBizName">INBAR Professional Cosmetic Center</p>
+    <p class="login-sub" id="loginBizName"></p>
     <form id="loginForm" class="login-form" autocomplete="on">
       <label class="field">
         <span>סיסמה</span>
@@ -34,6 +34,11 @@
       <button class="btn btn-primary btn-block" type="submit" id="loginBtn">כניסה</button>
       <p class="form-error" id="loginError" hidden></p>
     </form>
+    <div class="g-login" id="gLoginBox" hidden>
+      <p class="hint">יש לך עסק משלך? המסמכים יישמרו בגוגל דרייב שלך, ורק את/ה תראה אותם.</p>
+      <button class="btn btn-ghost btn-block" type="button" id="gLoginBtn">כניסה עם גוגל</button>
+      <p class="hint"><a href="./privacy.html" target="_blank" rel="noopener">מדיניות פרטיות</a></p>
+    </div>
   </div>
 </section>
 
@@ -493,7 +498,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="config.js"></script>
-<script type="module" src="app.js?v=202611224"></script>
+<script src="config.js?v=20261125"></script>
+<script type="module" src="app.js?v=202611254"></script>
 </body>
 </html>

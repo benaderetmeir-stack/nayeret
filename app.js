@@ -1,13 +1,14 @@
 // ניירת INBAR — לוגיקת האפליקציה
-import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261122";
-import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261122";
-import { recognize } from "./ocr.js?v=20261122";
-import { scanPage, scannerSupported } from "./scanner.js?v=20261122";
-import { getRate, curSign } from "./fx.js?v=20261122";
-import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261122";
-import { priceAlerts, mergePrices } from "./prices.js?v=20261122";
-import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt, nameScore } from "./paymatch.js?v=20261122";
-import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261122";
+import { FirebaseStore, DemoStore, FREE_BYTES } from "./store.js?v=20261125";
+import { DriveStore, googleAuthUrl, takeAuthFromHash, tokenMinutesLeft, googleEmail } from "./gdrive.js?v=20261125";
+import { fileToPages, makeThumb, isPdf, loadImage, compressCanvasSource } from "./images.js?v=20261125";
+import { recognize } from "./ocr.js?v=20261125";
+import { scanPage, scannerSupported } from "./scanner.js?v=20261125";
+import { getRate, curSign } from "./fx.js?v=20261125";
+import { supplierKey, missingRecurring, recurringList } from "./recur.js?v=20261125";
+import { priceAlerts, mergePrices } from "./prices.js?v=20261125";
+import { isPayment, isPayable, isAuthority, matchPayments, isProforma, findTaxInvoice, isReceipt, nameScore } from "./paymatch.js?v=20261125";
+import { COLS, KIND_LABEL, fmtMoney, fmtDate, sumOf, cellText, buildTablePdf, buildDocsPdf, buildCombinedPdf, buildExcel, downloadBlob, tryShare, fmtSize, localIso, fxNote, fxOrig, CATEGORIES, categorySummary, UNCAT, needsAllocation, missingAllocation, allocThreshold } from "./reports.js?v=20261125";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -151,14 +152,51 @@ function confirmBox(text, yes = "כן", danger = true, no = "ביטול") {
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-close]"); if (b) b.closest("dialog").close(); });
 
 /* ======================= הפעלה ======================= */
+// עסק אחר (חבר): כניסה עם גוגל, והכול נשמר בדרייב שלו. הכניסה הרגילה עם סיסמה לא משתנה
+const lsGet = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} };
+const gid = (cfg.googleClientId || "").trim();
+const googleRedirect = (prompt) => { location.href = googleAuthUrl(gid, { prompt, hint: googleEmail() }); };
+// תוקף הכניסה לגוגל הוא שעה: מחדשים בשקט כשאין חלון פתוח (כדי לא לאבד עבודה)
+function onAuthNeeded() {
+  if (document.querySelector("dialog[open]")) { toast("החיבור לגוגל פג. סגרי את החלון ונתחבר מחדש אוטומטית.", 5000); return; }
+  toast("מתחבר מחדש לגוגל…", 3000); setTimeout(() => googleRedirect("none"), 400);
+}
+const isGoogle = () => !!state.store?.google;
+$("gLoginBtn").onclick = () => { lsSet("nr_mode", "google"); googleRedirect("select_account"); };
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && isGoogle() && tokenMinutesLeft() < 10 && !document.querySelector("dialog[open]")) googleRedirect("none");
+});
+async function bootGoogle() {
+  const back = takeAuthFromHash();
+  if (back?.error) { lsSet("nr_mode", ""); if (!/access_denied|interaction_required|login_required/.test(back.error)) showLoginError("הכניסה עם גוגל לא הצליחה. נסי שוב."); return false; }
+  if (!(back?.ok || lsGet("nr_mode") === "google")) return false;
+  lsSet("nr_mode", "google");
+  if (tokenMinutesLeft() <= 2) { googleRedirect("none"); return true; }   // חידוש שקט
+  state.store = new DriveStore({ onAuthNeeded });
+  $("loginView").hidden = false; $("loginForm").hidden = true; $("gLoginBox").hidden = true;
+  $("loginBizName").textContent = "מתחבר לגוגל דרייב…";
+  try { await state.store.init(); }
+  catch (e) {
+    console.error(e); if (e.code === "auth") return true;
+    $("loginForm").hidden = false; $("gLoginBox").hidden = false; $("loginBizName").textContent = "";
+    showLoginError("לא הצלחתי להתחבר לגוגל דרייב. נסי שוב."); lsSet("nr_mode", ""); return false;
+  }
+  state.store.onAuth((signed) => signed ? enterApp() : showLogin());
+  return true;
+}
+
 async function boot() {
+  $("gLoginBox").hidden = !gid;
+  $("loginBizName").textContent = lsGet("nr_biz");
+  if (gid && cfg.firebase && await bootGoogle()) return;
   state.store = cfg.firebase ? new FirebaseStore(cfg) : new DemoStore();
   try { await state.store.init(); }
   catch (e) { console.error(e); $("loginView").hidden = false; showLoginError("אין חיבור לשרת. בדקי את האינטרנט ורענני."); return; }
   if (state.store.demo) {
     $("demoBanner").hidden = false;
     $("loginPassword").placeholder = "בתצוגה: כל סיסמה";
-    const { seedDemo } = await import("./demo.js?v=20261122");
+    const { seedDemo } = await import("./demo.js?v=20261125");
     await seedDemo(state.store);
   }
   state.store.onAuth((signed) => signed ? enterApp() : showLogin());
@@ -182,6 +220,8 @@ async function enterApp() {
   try { state.settings = await state.store.getSettings(); }
   catch (e) { console.error(e); toast("לא הצלחתי לטעון הגדרות. ייתכן שחסרה הרשאה למשתמש.", 6000); state.settings = { closedMonths: [], recentEmails: [], vatRate: 18 }; }
   $("bizName").textContent = state.settings.businessName || "";
+  lsSet("nr_biz", state.settings.businessName || "");
+  document.body.classList.toggle("is-google", isGoogle());
   await autoCloseMonths();
   loadRecur(); loadPrices();
   setView(location.hash.replace("#", "") || "invoice");
@@ -689,7 +729,11 @@ function printImages(urls) {
 /* ======================= העלאה ואישור ======================= */
 const up = { runId: 0, inboxIds: null, inboxQueue: [], pages: [], queue: [], edit: null, pendingFiles: null, manualMonth: false, dupTimer: 0, dupFound: null, pageIdx: 0 };
 
-$("fab").onclick = () => openUpload();
+$("fab").onclick = () => {
+  // לפני העלאה: אם החיבור לגוגל עומד לפוג, מחדשים קודם (כדי שהשמירה לא תיכשל באמצע)
+  if (isGoogle() && tokenMinutesLeft() < 15) { toast("רגע, מחדש את החיבור לגוגל…", 3000); return setTimeout(() => googleRedirect("none"), 400); }
+  openUpload();
+};
 function showStep(id) { ["upCollect", "upMulti", "upPdfSplit", "upReview"].forEach((s) => ($(s).hidden = s !== id)); }
 function openUpload(opts = {}) {
   up.runId++; up.skipCtl?.abort(); up.batch = null; renderBatchNav();
@@ -1502,17 +1546,18 @@ async function shareFiles(files, title) {
 async function refreshUsage() {
   let u;
   try { u = await state.store.getUsage(); } catch (e) { console.warn(e); $("usageText").textContent = "לא הצלחתי לבדוק כרגע"; return; }
-  const pct = Math.min(100, (u.bytes / FREE_BYTES) * 100);
+  const LIMIT = u.limit || FREE_BYTES;
+  const pct = Math.min(100, (u.bytes / LIMIT) * 100);
   const mb = (b) => "\u2066" + mb0(b) + "\u2069";
   const mb0 = (b) => b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + " GB" : b >= 1024 ** 2 ? Math.round(b / 1024 ** 2) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
   // עד שיש מספיק מסמכים, מניחים בזהירות כ-250KB למסמך
   const avg = u.docs >= 20 ? u.bytes / u.docs : Math.max(u.docs ? u.bytes / u.docs : 0, 250 * 1024);
-  const left = Math.max(0, Math.floor((FREE_BYTES - u.bytes) / avg));
+  const left = Math.max(0, Math.floor((LIMIT - u.bytes) / avg));
   const fill = $("usageFill");
   fill.style.width = Math.max(pct, 1) + "%";
   fill.classList.toggle("is-warn", pct >= 80 && pct < 95);
   fill.classList.toggle("is-full", pct >= 95);
-  $("usageText").textContent = `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% בשימוש · ${mb(u.bytes)} מתוך \u20661 GB\u2069`;
+  $("usageText").textContent = `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% בשימוש · ${mb(u.bytes)} מתוך \u2066${u.limit ? Math.round(LIMIT / 1024 ** 3) : 1} GB\u2069${u.limit ? " (גוגל דרייב)" : ""}`;
   $("usageSub").textContent = `${u.docs} מסמכים שמורים · מקום לעוד כ-${left.toLocaleString("he-IL")} מסמכים`;
   const warn = pct >= 95 ? `האחסון כמעט מלא (${Math.round(pct)}%). כדי להמשיך להעלות: להוריד שנים ישנות כקובץ משולב לגיבוי ולמחוק אותן, או לעבור למסלול Blaze ב-Firebase (בערך חצי שקל לחודש לכל GB נוסף).`
     : pct >= 80 ? `האחסון מתמלא (${Math.round(pct)}%). כדאי לתכנן מראש: גיבוי ומחיקה של שנים ישנות, או מעבר למסלול Blaze ב-Firebase.` : "";

@@ -502,3 +502,5 @@ button.big-choice { font: inherit; font-weight: 700; font-size: 17px; }
 .pill-wait { white-space: normal; display: inline-block; max-width: 100%; line-height: 1.4; text-align: start; }
 .at-item { width: 100%; text-align: start; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid #E3E8EC; border-radius: 10px; background: #fff; font: inherit; cursor: pointer; }
 .at-item:hover { border-color: #0E9AA7; }
+.g-login { margin-top: 18px; padding-top: 14px; border-top: 1px solid #E3E8EC; display: grid; gap: 8px; text-align: center; }
+.g-login .hint { margin: 0; }
